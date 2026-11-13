@@ -110,6 +110,19 @@
                     </DockPanel>
                 </Border>
                 <Border Style="{StaticResource Row}">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Text="알림 개인정보 보호"/>
+                            <TextBlock Text="쪽지·대화 알림이 뜰 때 화면에 보여 줄 범위입니다. 가려진 알림은 누르거나 '내용 보기'를 눌러야 보이고, 그 전에는 읽음으로 처리하지 않습니다." Style="{StaticResource Help}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <WrapPanel x:Name="PrivacyPanel" Margin="0,10,0,0">
+                            <RadioButton GroupName="Privacy" Style="{StaticResource FilterChip}" Tag="0" Margin="0,0,6,6"><TextBlock Text="보낸 사람, 메시지 내용 모두 표시" FontSize="12"/></RadioButton>
+                            <RadioButton GroupName="Privacy" Style="{StaticResource FilterChip}" Tag="1" Margin="0,0,6,6"><TextBlock Text="보낸 사람만 표시" FontSize="12"/></RadioButton>
+                            <RadioButton GroupName="Privacy" Style="{StaticResource FilterChip}" Tag="2" Margin="0,0,6,6"><TextBlock Text="보낸 사람, 메시지 내용 모두 숨기기" FontSize="12"/></RadioButton>
+                        </WrapPanel>
+                    </DockPanel>
+                </Border>
+                <Border Style="{StaticResource Row}">
                     <CheckBox x:Name="ReceiptChk" Style="{StaticResource Switch}">
                         <StackPanel>
                             <TextBlock Text="읽음 확인 보내기"/>

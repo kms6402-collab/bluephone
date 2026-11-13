@@ -29,7 +29,7 @@ namespace BluePhone
                 if (!Message.Urgent) SetTag("1:1 대화", "Accent", "AccentSoft");
                 ReplyText.Text = "대화 열기";
                 ChatBtn.Visibility = Visibility.Collapsed;
-                Title = (Message.FromName ?? "") + "님의 대화";
+                if (_privacy < 2) Title = (Message.FromName ?? "") + "님의 대화";
             }
         }
         /// <summary>'다시 알림'으로 다시 뜬 팝업</summary>
@@ -85,7 +85,13 @@ namespace BluePhone
             if (m.Files.Count > 0 && string.IsNullOrWhiteSpace(m.Text)) Body.Visibility = Visibility.Collapsed;
 
             Activated += (s, e) => MarkRead();
-            PreviewMouseDown += (s, e) => { MarkRead(); StopAutoClose(); };
+            PreviewMouseDown += (s, e) =>
+            {
+                // 가려진 창: 버튼이 아닌 곳을 누르면 내용 표시 (닫기 버튼은 안 읽은 채로 닫힘)
+                if (_veiled && !(FindButton(e.OriginalSource as DependencyObject))) Reveal();
+                MarkRead();
+                StopAutoClose();
+            };
             Loaded += (s, e) => Animate();
             SizeChanged += (s, e) => { if (e.HeightChanged) _core.LayoutPopups(); };
             LocationChanged += (s, e) => { if (!_core.InLayout && IsLoaded) UserMoved = true; };
@@ -104,6 +110,7 @@ namespace BluePhone
         void RefreshHeader()
         {
             var m = Message;
+            if (_privacy >= 2) { ApplyAnonymousHeader(); return; }
             if (m.Outgoing)
             {
                 var names = m.ToNames;
@@ -142,6 +149,7 @@ namespace BluePhone
 
         void MarkRead()
         {
+            if (_veiled) return;   // 내용을 보기 전에는 읽음으로 만들지 않음
             if (!Message.Outgoing && !Message.Read) _core.MarkRead(Message, fromPopup: true);
         }
 
@@ -199,6 +207,79 @@ namespace BluePhone
             Close();
         }
 
+        // ───────────── privacy ─────────────
+
+        int _privacy;
+        bool _veiled;
+
+        /// <summary>
+        /// 알림 개인정보 보호. 1 = 보낸 사람만 표시(내용 가림), 2 = 보낸 사람·내용 모두 가림.
+        /// 누르거나 '내용 보기'·답장을 해야 보이며, 그 전에는 읽음 처리하지 않는다.
+        /// </summary>
+        public int Privacy
+        {
+            get => _privacy;
+            set
+            {
+                _privacy = Message.Outgoing ? 0 : Math.Max(0, Math.Min(2, value));
+                if (_privacy == 0) return;
+                _veiled = true;
+                Body.Visibility = Visibility.Collapsed;
+                FileList.Visibility = Visibility.Collapsed;
+                Veil.Visibility = Visibility.Visible;
+                var kind = Message.Chat ? "메시지" : "쪽지";
+                int n = Message.Files.Count;
+                VeilText.Text = n > 0 ? $"새 {kind}가 도착했습니다 · 첨부 {n}개" : $"새 {kind}가 도착했습니다";
+                if (_privacy >= 2) ApplyAnonymousHeader();
+            }
+        }
+
+        void ApplyAnonymousHeader()
+        {
+            var kind = Message.Chat ? "새 메시지" : "새 쪽지";
+            FromName.Text = kind;
+            Title = kind;
+            Initial.Text = "";
+            Avatar.Fill = (Brush)FindResource("Faint");
+            Photo.ImageSource = null;
+            SubLine.Text = Message.FullTime;
+            SubLine.ToolTip = null;
+            Footnote.Text = "";
+        }
+
+        void Reveal_Click(object sender, RoutedEventArgs e) { Reveal(); MarkRead(); StopAutoClose(); }
+
+        void Reveal()
+        {
+            if (!_veiled) return;
+            _veiled = false;
+            int was = _privacy;
+            _privacy = 0;
+            Veil.Visibility = Visibility.Collapsed;
+            var m = Message;
+            FileList.Visibility = m.Files.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            Body.Visibility = m.Files.Count > 0 && string.IsNullOrWhiteSpace(m.Text) ? Visibility.Collapsed : Visibility.Visible;
+            if (was >= 2)
+            {
+                Avatar.Fill = m.AvatarBrush;
+                SubLine.Text = string.Join(" · ", new[] { m.PeerDept, m.FullTime }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                SubLine.ToolTip = m.PeerIp;
+                if (m.To.Count > 1 && !m.Broadcast) Footnote.Text = $"나 외 {m.To.Count - 1}명에게 보낸 쪽지";
+                RefreshHeader();
+                if (_chatAlert) Title = (m.FromName ?? "") + "님의 대화";
+            }
+        }
+
+        static bool FindButton(DependencyObject d)
+        {
+            while (d != null)
+            {
+                if (d is System.Windows.Controls.Primitives.ButtonBase) return true;
+                d = d is Visual || d is System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
+            }
+            return false;
+        }
+
         void Close_Click(object sender, RoutedEventArgs e)
         {
             MarkRead();
@@ -241,6 +322,7 @@ namespace BluePhone
 
         void Copy_Click(object sender, RoutedEventArgs e)
         {
+            Reveal();
             try { Clipboard.SetText(Message.Text ?? ""); Footnote.Text = "복사했습니다"; } catch { }
         }
 
@@ -250,6 +332,7 @@ namespace BluePhone
 
         void Reply_Click(object sender, RoutedEventArgs e)
         {
+            Reveal();
             if (_chatAlert) { Chat_Click(sender, e); return; }
             MarkRead();
             if (Message.Outgoing)

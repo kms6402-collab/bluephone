@@ -262,6 +262,8 @@ namespace BluePhone
         public bool PopupNoFocus { get; set; } = true;
         /// <summary>받은 쪽지 창 자동 닫기(초). 0 이면 닫지 않음</summary>
         public int PopupAutoClose { get; set; }
+        /// <summary>알림 개인정보 보호: 0 = 보낸 사람·내용 모두 표시, 1 = 보낸 사람만, 2 = 모두 숨기기</summary>
+        public int AlertPrivacy { get; set; } = 1;
         public bool StartHidden { get; set; } = false;
         public int AutoAwayMinutes { get; set; } = 10;
         public string AutoReply { get; set; } = "";

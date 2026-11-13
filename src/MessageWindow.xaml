@@ -45,6 +45,18 @@
         <TextBox x:Name="Body" Grid.Row="2" Style="{StaticResource BareArea}" IsReadOnly="True" Margin="18,2,12,16" MinHeight="44" MaxHeight="320"
                  IsReadOnlyCaretVisible="False" FontSize="14"/>
 
+        <!-- 개인정보 보호: 내용 가림 -->
+        <Border x:Name="Veil" Grid.Row="2" Margin="18,2,18,16" Background="{StaticResource Canvas}" CornerRadius="8" Padding="14,12"
+                Cursor="Hand" Visibility="Collapsed" ToolTip="누르면 내용을 표시합니다">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource Outline}" Height="28" Padding="12,0" Content="내용 보기" Click="Reveal_Click" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="&#xE72E;" FontFamily="{StaticResource Glyph}" FontSize="13" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="VeilText" Text="내용이 가려져 있습니다" Foreground="{StaticResource Ink2}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
         <!-- files -->
         <ItemsControl x:Name="FileList" Grid.Row="3" Margin="12,0,12,8" Focusable="False">
             <ItemsControl.ItemTemplate>

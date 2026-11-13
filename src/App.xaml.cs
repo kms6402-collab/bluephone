@@ -866,6 +866,8 @@ namespace BluePhone
                 foreach (var old in _popups.Where(x => x.Message.Chat && !x.Message.Outgoing && x.Message.PeerId == m.PeerId).ToList()) old.CloseIfIdle();
 
             var w = new MessageWindow(this, m) { IsReminder = reminder, IsChatAlert = m.Chat && !m.Outgoing };
+            // 개인정보 보호: 저절로 뜨는 알림만 가림 (쪽지함에서 직접 연 창은 그대로 표시)
+            if (!activate && !m.Outgoing) w.Privacy = Settings.AlertPrivacy;
             w.Closed += (s, e) => { _popups.Remove(w); LayoutPopups(); };
             w.Slot = _popups.Count == 0 ? 0 : _popups.Max(p => p.Slot) + 1;
             _popups.Add(w);
