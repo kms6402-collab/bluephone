@@ -47,7 +47,13 @@
                 </Grid>
                 <StackPanel Grid.Column="1" Margin="0,10,12,10">
                     <Grid>
-                        <TextBlock Text="{Binding Who}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,64,0"/>
+                        <DockPanel Margin="0,0,64,0" LastChildFill="True">
+                            <Border DockPanel.Dock="Right" Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
+                                    Visibility="{Binding Chat, Converter={StaticResource Vis}}">
+                                <TextBlock Text="대화" Foreground="{StaticResource Accent}" FontSize="10.5" FontWeight="SemiBold"/>
+                            </Border>
+                            <TextBlock Text="{Binding Who}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
                         <TextBlock Text="{Binding TimeText}" HorizontalAlignment="Right" Foreground="{StaticResource Faint}" FontSize="11.5"/>
                     </Grid>
                     <DockPanel Margin="0,2,0,0">

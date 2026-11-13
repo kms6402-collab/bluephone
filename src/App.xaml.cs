@@ -494,7 +494,7 @@ namespace BluePhone
         // ───────────────────────── messaging ─────────────────────────
 
         /// <summary>쪽지 보내기. at 을 주면 예약, 받지 못한 동료에게는 접속할 때 다시 보냄</summary>
-        public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false, DateTime? at = null)
+        public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false, DateTime? at = null, bool chat = false)
         {
             var m = new ChatMessage
             {
@@ -510,6 +510,7 @@ namespace BluePhone
                 Urgent = urgent,
                 Broadcast = broadcast,
                 Auto = auto,
+                Chat = chat,
                 To = to.Select(p => p.DisplayName).ToList(),
                 ToIds = to.Select(p => p.Id).ToList(),
             };
@@ -548,6 +549,7 @@ namespace BluePhone
             ["urgent"] = m.Urgent,
             ["broadcast"] = m.Broadcast,
             ["auto"] = m.Auto,
+            ["kind"] = m.Chat ? "chat" : "note",
             ["to"] = m.To,
             ["files"] = m.Files.Select(f => new Packet { ["name"] = f.Name, ["size"] = f.Size, ["token"] = f.Token }).ToList(),
         };
@@ -687,6 +689,7 @@ namespace BluePhone
                 Broadcast = NetService.Bool(p, "broadcast"),
                 Auto = NetService.Bool(p, "auto"),
                 Secure = NetService.Bool(p, "_secure"),
+                Chat = NetService.Str(p, "kind") == "chat",
                 To = NetService.StrList(p, "to"),
                 Files = NetService.ObjList(p, "files").Select(f => new FileItem
                 {
@@ -710,7 +713,8 @@ namespace BluePhone
             else if (!dnd)
             {
                 if (Settings.Sound) Native.PlayChime(m.Urgent);
-                if (chat != null && chat.IsVisible) Native.Flash(chat, false);
+                // 1:1 대화 메시지는 열려 있는 대화 창으로, 쪽지는 쪽지 창으로
+                if (m.Chat && chat != null && chat.IsVisible) Native.Flash(chat, false);
                 else ShowPopup(m);
             }
 
@@ -855,7 +859,13 @@ namespace BluePhone
             var existing = _popups.FirstOrDefault(p => p.Message == m);
             if (existing != null) { Native.BringToFront(existing); return; }
 
-            var w = new MessageWindow(this, m) { IsReminder = reminder };
+            // 대화 메시지를 직접 열면 대화 창으로
+            if (m.Chat && activate && PeerOf(m) is Peer cp) { OpenChat(cp); return; }
+            // 같은 동료의 대화 알림은 하나만 (가장 최근 것으로 교체)
+            if (m.Chat && !m.Outgoing)
+                foreach (var old in _popups.Where(x => x.Message.Chat && !x.Message.Outgoing && x.Message.PeerId == m.PeerId).ToList()) old.CloseIfIdle();
+
+            var w = new MessageWindow(this, m) { IsReminder = reminder, IsChatAlert = m.Chat && !m.Outgoing };
             w.Closed += (s, e) => { _popups.Remove(w); LayoutPopups(); };
             w.Slot = _popups.Count == 0 ? 0 : _popups.Max(p => p.Slot) + 1;
             _popups.Add(w);
@@ -868,7 +878,12 @@ namespace BluePhone
             LayoutPopups();
             if (m.Urgent && !w.IsActive) Native.Flash(w, untilFocus: true);
             // 새로 도착한(또는 다시 알림) 쪽지만 자동으로 닫음. 직접 연 창·긴급 쪽지는 그대로 둠
-            if (!activate && !m.Urgent && !m.Outgoing && Settings.PopupAutoClose > 0) w.StartAutoClose(Settings.PopupAutoClose);
+            // 대화 알림은 5초 뒤 바로 사라짐(대화 창에서 이어서 봄)
+            if (!activate && !m.Urgent && !m.Outgoing)
+            {
+                int secs = m.Chat && !reminder ? 5 : Settings.PopupAutoClose;
+                if (secs > 0) w.StartAutoClose(secs);
+            }
         }
 
         public bool InLayout { get; private set; }

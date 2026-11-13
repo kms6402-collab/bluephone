@@ -35,6 +35,7 @@ namespace BluePhone
             _broadcast = broadcast;
             InitializeComponent();
             Chrome.Apply(this);
+            Chrome.NoMaximize(this);
 
             foreach (var p in to ?? new Peer[0]) _to.Add(p);
             ToList.ItemsSource = _to;

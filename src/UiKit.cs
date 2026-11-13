@@ -15,6 +15,28 @@ namespace BluePhone
     public static class Chrome
     {
         /// <summary>시스템 그림자 · 스냅 · 리사이즈를 유지하는 커스텀 타이틀바</summary>
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int i, int v);
+
+        /// <summary>
+        /// 최대화 금지: 제목줄 더블클릭·Win+↑·화면 위로 끌기로 커지지 않도록 최대화 버튼 스타일을 없애고 최대화 명령을 막는다.
+        /// </summary>
+        public static void NoMaximize(Window w)
+        {
+            w.SourceInitialized += (s, e) =>
+            {
+                var h = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                SetWindowLong(h, -16, GetWindowLong(h, -16) & ~0x00010000);   // WS_MAXIMIZEBOX
+                System.Windows.Interop.HwndSource.FromHwnd(h).AddHook((IntPtr hw, int msg, IntPtr wp, IntPtr lp, ref bool handled) =>
+                {
+                    if (msg == 0x0112 && (wp.ToInt64() & 0xFFF0) == 0xF030) handled = true;   // WM_SYSCOMMAND / SC_MAXIMIZE
+                    else if (msg == 0x00A3) handled = true;                                    // WM_NCLBUTTONDBLCLK
+                    return IntPtr.Zero;
+                });
+            };
+            w.StateChanged += (s, e) => { if (w.WindowState == WindowState.Maximized) w.WindowState = WindowState.Normal; };
+        }
+
         public static void Apply(Window w, double caption = 40, bool resizable = true)
         {
             w.Style = (Style)Application.Current.FindResource("AppWindow");

@@ -68,6 +68,10 @@
                                 Visibility="{Binding Urgent, Converter={StaticResource Vis}}">
                             <TextBlock Text="긴급" Foreground="{StaticResource Danger}" FontSize="11" FontWeight="SemiBold"/>
                         </Border>
+                        <Border Background="{StaticResource Hover}" CornerRadius="4" Padding="5,0" Margin="0,0,4,0"
+                                Visibility="{Binding IsNote, Converter={StaticResource Vis}}" ToolTip="쪽지 창으로 주고받은 쪽지">
+                            <TextBlock Text="쪽지" Foreground="{StaticResource Muted}" FontSize="11" FontWeight="SemiBold"/>
+                        </Border>
                         <TextBlock x:Name="grp" FontSize="11" Foreground="{StaticResource Faint}" Text="{Binding Who, StringFormat='여러 명에게 · {0}'}" Visibility="Collapsed"/>
                     </StackPanel>
                     <Border x:Name="bubble" Background="{StaticResource Canvas}" CornerRadius="14,14,14,4" Padding="12,8" MaxWidth="290"

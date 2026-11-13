@@ -31,6 +31,7 @@ namespace BluePhone
             Peer = peer;
             InitializeComponent();
             Chrome.Apply(this, caption: 58);
+            Chrome.NoMaximize(this);
 
             _view = new ListCollectionView(core.History)
             {
@@ -144,7 +145,7 @@ namespace BluePhone
             ClearSchedule_Click(null, null);
             bool urgent = Urgent.IsChecked == true;
             Urgent.IsChecked = false;
-            try { await _core.Send(new[] { Peer }, text, files, urgent, false, at: at); }
+            try { await _core.Send(new[] { Peer }, text, files, urgent, false, at: at, chat: true); }
             finally { _sending = false; UpdateSendState(); Input.Focus(); }
             ScrollToEnd();
         }

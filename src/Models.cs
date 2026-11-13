@@ -167,6 +167,9 @@ namespace BluePhone
         /// <summary>예약 발송 시각(ms). 0 이면 즉시</summary>
         public long ScheduledTs { get; set; }
         public bool Scheduled { get; set; }
+        /// <summary>1:1 대화 창에서 보낸(받은) 메시지. false 면 쪽지</summary>
+        public bool Chat { get; set; }
+        [ScriptIgnore] public bool IsNote => !Chat;
         public bool Secure { get; set; }
         [ScriptIgnore] public bool IsPending => Outgoing && (Scheduled || PendingTo.Count > 0);
         [ScriptIgnore] public string ScheduleText => DateTimeOffset.FromUnixTimeMilliseconds(ScheduledTs).LocalDateTime.ToString("M월 d일 tt h:mm");

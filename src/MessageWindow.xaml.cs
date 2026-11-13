@@ -17,7 +17,21 @@ namespace BluePhone
         public ChatMessage Message { get; }
         public int Slot { get; set; }
         public bool UserMoved { get; set; }
-        bool _reminder;
+        bool _reminder, _chatAlert;
+        /// <summary>1:1 대화로 온 메시지 알림 — 답장 대신 '대화 열기'</summary>
+        public bool IsChatAlert
+        {
+            get => _chatAlert;
+            set
+            {
+                _chatAlert = value;
+                if (!value) return;
+                if (!Message.Urgent) SetTag("1:1 대화", "Accent", "AccentSoft");
+                ReplyText.Text = "대화 열기";
+                ChatBtn.Visibility = Visibility.Collapsed;
+                Title = (Message.FromName ?? "") + "님의 대화";
+            }
+        }
         /// <summary>'다시 알림'으로 다시 뜬 팝업</summary>
         public bool IsReminder
         {
@@ -33,6 +47,7 @@ namespace BluePhone
             Message = m;
             InitializeComponent();
             Chrome.Apply(this, caption: 64);
+            Chrome.NoMaximize(this);
             // 헤더 영역만 드래그 가능하도록 캡션 높이 지정
             WindowChrome.GetWindowChrome(this).CaptionHeight = m.Urgent ? 67 : 64;
 
@@ -235,6 +250,7 @@ namespace BluePhone
 
         void Reply_Click(object sender, RoutedEventArgs e)
         {
+            if (_chatAlert) { Chat_Click(sender, e); return; }
             MarkRead();
             if (Message.Outgoing)
             {

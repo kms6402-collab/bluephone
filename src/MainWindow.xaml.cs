@@ -435,7 +435,7 @@ namespace BluePhone
 
         void HistoryList_DoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if ((e.OriginalSource as FrameworkElement)?.DataContext is ChatMessage m) _core.ShowPopup(m, activate: true);
+            if ((e.OriginalSource as FrameworkElement)?.DataContext is ChatMessage m) OpenMsg(m);
         }
 
         void HistoryList_KeyDown(object sender, KeyEventArgs e)
@@ -446,7 +446,15 @@ namespace BluePhone
 
         void HmOpen_Click(object sender, RoutedEventArgs e)
         {
-            foreach (var m in SelectedMsgs().Take(6)) _core.ShowPopup(m, activate: true);
+            foreach (var m in SelectedMsgs().Take(6)) OpenMsg(m);
+        }
+
+        /// <summary>쪽지는 쪽지 창으로, 1:1 대화는 대화 창으로</summary>
+        void OpenMsg(ChatMessage m)
+        {
+            var p = m.Chat ? _core.PeerOf(m) : null;
+            if (p != null) _core.OpenChat(p);
+            else _core.ShowPopup(m, activate: true);
         }
 
         void HmReply_Click(object sender, RoutedEventArgs e)
