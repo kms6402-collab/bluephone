@@ -1,0 +1,47 @@
+<Window x:Class="BluePhone.UpdateWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="업데이트" Width="440" SizeToContent="Height" WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Height="40">
+            <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
+                <ContentControl ContentTemplate="{StaticResource LogoMark}" Focusable="False"/>
+                <TextBlock Text="파란전화기" FontWeight="SemiBold" Margin="9,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+            <Button Style="{StaticResource ChromeClose}" Content="&#xE8BB;" HorizontalAlignment="Right" VerticalAlignment="Top" Click="Later_Click"/>
+        </Grid>
+
+        <StackPanel Grid.Row="1" Margin="24,8,24,0">
+            <TextBlock x:Name="Heading" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBlock x:Name="SubHeading" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+
+            <TextBlock Text="변경 사항" Style="{StaticResource Label}" Margin="0,18,0,8"/>
+            <Border Background="{StaticResource Canvas}" CornerRadius="8" Padding="14,12" MaxHeight="300">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBlock x:Name="Notes" TextWrapping="Wrap" LineHeight="21" Foreground="{StaticResource Ink2}"/>
+                </ScrollViewer>
+            </Border>
+
+            <StackPanel x:Name="ProgressPane" Margin="0,14,0,0" Visibility="Collapsed">
+                <ProgressBar x:Name="Bar" Height="4" Maximum="1" BorderThickness="0" Background="{StaticResource Line}" Foreground="{StaticResource Accent}"/>
+                <TextBlock x:Name="ProgressText" Style="{StaticResource Caption}" Margin="0,6,0,0"/>
+            </StackPanel>
+            <TextBlock x:Name="Error" Foreground="{StaticResource Danger}" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="Collapsed"/>
+        </StackPanel>
+
+        <DockPanel Grid.Row="2" Margin="24,20,24,20" LastChildFill="False">
+            <TextBlock x:Name="SkipLink" DockPanel.Dock="Left" VerticalAlignment="Center" Cursor="Hand" Foreground="{StaticResource Muted}"
+                       Text="이 버전 건너뛰기" MouseLeftButtonUp="Skip_Click" TextDecorations="Underline" FontSize="12"/>
+            <Button x:Name="PrimaryBtn" DockPanel.Dock="Right" Style="{StaticResource Primary}" MinWidth="110" Height="34" Click="Primary_Click">
+                <TextBlock x:Name="PrimaryText"/>
+            </Button>
+            <Button x:Name="LaterBtn" DockPanel.Dock="Right" Style="{StaticResource Outline}" MinWidth="76" Height="34" Margin="0,0,8,0" Click="Later_Click"/>
+        </DockPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,246 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Shell;
+
+namespace BluePhone
+{
+    public partial class MessageWindow : Window
+    {
+        readonly Core _core;
+        public ChatMessage Message { get; }
+        public int Slot { get; set; }
+        public bool UserMoved { get; set; }
+        bool _replying, _sending;
+        string _lastSaved;
+
+        public MessageWindow(Core core, ChatMessage m)
+        {
+            _core = core;
+            Message = m;
+            InitializeComponent();
+            Chrome.Apply(this, caption: 64);
+            // 헤더 영역만 드래그 가능하도록 캡션 높이 지정
+            WindowChrome.GetWindowChrome(this).CaptionHeight = m.Urgent ? 67 : 64;
+
+            Avatar.Fill = m.AvatarBrush;
+            Body.Text = m.Text;
+            RefreshHeader();
+            core.PeerRenamed += OnPeerRenamed;
+            Closed += (s, e) => core.PeerRenamed -= OnPeerRenamed;
+
+            if (m.Outgoing)
+            {
+                SubLine.Text = "보낸 쪽지 · " + m.FullTime;
+                Footnote.Text = m.Meta;
+                ReplyText.Text = "다시 쓰기";
+                foreach (var f in m.Files) f.State = "보낸 파일";
+            }
+            else
+            {
+                var sub = new[] { m.PeerDept, m.FullTime }.Where(x => !string.IsNullOrWhiteSpace(x));
+                SubLine.Text = string.Join(" · ", sub);
+                SubLine.ToolTip = $"{m.PeerIp}";
+                if (m.To.Count > 1 && !m.Broadcast) Footnote.Text = $"나 외 {m.To.Count - 1}명에게 보낸 쪽지";
+                foreach (var f in m.Files)
+                    if (string.IsNullOrEmpty(f.State)) f.State = !string.IsNullOrEmpty(f.LocalPath) && File.Exists(f.LocalPath) ? "완료" : "";
+            }
+
+            if (m.Urgent) { UrgentLine.Visibility = Visibility.Visible; SetTag("긴급", "Danger", "DangerSoft"); }
+            else if (m.Broadcast) SetTag("전체 공지", "Accent", "AccentSoft");
+            else if (m.Auto) SetTag("자동응답", "Muted", "Hover");
+
+            FileList.ItemsSource = m.Files;
+            FileList.Visibility = m.Files.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (m.Files.Count > 0 && string.IsNullOrWhiteSpace(m.Text)) Body.Visibility = Visibility.Collapsed;
+
+            Activated += (s, e) => MarkRead();
+            PreviewMouseDown += (s, e) => MarkRead();
+            Loaded += (s, e) => Animate();
+            SizeChanged += (s, e) => { if (e.HeightChanged) _core.LayoutPopups(); };
+            LocationChanged += (s, e) => { if (!_core.InLayout && IsLoaded) UserMoved = true; };
+            PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Escape)
+                {
+                    if (_replying && ReplyBox.Text.Length > 0) { ReplyBox.Clear(); return; }
+                    Close();
+                }
+                else if (e.Key == Key.R && Keyboard.Modifiers == ModifierKeys.Control && !_replying) { e.Handled = true; Reply_Click(null, null); }
+            };
+        }
+
+        /// <summary>보낸 사람 이름·사진 (동료가 이름을 바꾸거나 별명을 붙이면 열린 창도 바로 갱신)</summary>
+        void RefreshHeader()
+        {
+            var m = Message;
+            if (m.Outgoing)
+            {
+                var names = m.ToNames;
+                FromName.Text = names.Count > 1 ? $"{names[0]} 외 {names.Count - 1}명" : (names.FirstOrDefault() ?? m.FromName ?? "");
+                Title = "보낸 쪽지";
+                Body.ToolTip = names.Count > 1 ? string.Join(", ", names) : null;
+            }
+            else
+            {
+                FromName.Text = m.FromName;
+                Title = (m.FromName ?? "") + "님의 쪽지";
+            }
+            Initial.Text = string.IsNullOrEmpty(FromName.Text) ? "?" : FromName.Text.Substring(0, 1);
+            Photo.ImageSource = m.AvatarImage;
+        }
+
+        void OnPeerRenamed(Peer p)
+        {
+            if (p != null && Message.Involves(p.Id)) RefreshHeader();
+        }
+
+        void SetTag(string text, string fg, string bg)
+        {
+            Tag1.Visibility = Visibility.Visible;
+            Tag1Text.Text = text;
+            Tag1Text.Foreground = (Brush)FindResource(fg);
+            Tag1.Background = (Brush)FindResource(bg);
+        }
+
+        void Animate()
+        {
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(14, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+            Root.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
+        }
+
+        void MarkRead()
+        {
+            if (!Message.Outgoing && !Message.Read) _core.MarkRead(Message);
+        }
+
+        void Close_Click(object sender, RoutedEventArgs e)
+        {
+            MarkRead();
+            Close();
+        }
+
+        void Copy_Click(object sender, RoutedEventArgs e)
+        {
+            try { Clipboard.SetText(Message.Text ?? ""); Footnote.Text = "복사했습니다"; } catch { }
+        }
+
+        // ───────────── reply ─────────────
+
+        Peer Target() => _core.PeerOf(Message);
+
+        void Reply_Click(object sender, RoutedEventArgs e)
+        {
+            MarkRead();
+            if (Message.Outgoing)
+            {
+                var targets = Message.ToIds.Select(id => _core.Peers.FirstOrDefault(p => p.Id == id)).Where(p => p != null).ToArray();
+                _core.Compose(targets);
+                return;
+            }
+            if (!_replying)
+            {
+                _replying = true;
+                ReplyPane.Visibility = Visibility.Visible;
+                ReplyText.Text = "보내기";
+                Activate();
+                ReplyBox.Focus();
+                return;
+            }
+            SendReply();
+        }
+
+        void ReplyBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control) { e.Handled = true; SendReply(); }
+        }
+
+        async void SendReply()
+        {
+            var text = ReplyBox.Text.Trim();
+            if (text.Length == 0 || _sending) return;
+            var peer = Target();
+            if (peer == null) { Footnote.Text = "보낸 사람을 찾을 수 없습니다"; return; }
+            _sending = true;
+            ReplyBtn.IsEnabled = false;
+            ReplyText.Text = "보내는 중…";
+            var m = await _core.Send(new[] { peer }, text, null, false, false);
+            if (m.Failed)
+            {
+                _sending = false;
+                ReplyBtn.IsEnabled = true;
+                ReplyText.Text = "다시 보내기";
+                Footnote.Text = "전달하지 못했습니다";
+                Footnote.Foreground = (Brush)FindResource("Danger");
+                return;
+            }
+            Footnote.Text = "답장을 보냈습니다";
+            ReplyText.Text = "보냄";
+            await System.Threading.Tasks.Task.Delay(500);
+            Close();
+        }
+
+        // ───────────── files ─────────────
+
+        void Footnote_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (_lastSaved != null) _core.OpenDownloads(_lastSaved);
+        }
+
+        void FileFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (((Button)sender).Tag is FileItem f) _core.OpenDownloads(f.LocalPath);
+        }
+
+        async void FileAction_Click(object sender, RoutedEventArgs e)
+        {
+            MarkRead();
+            if (!(((Button)sender).Tag is FileItem f)) return;
+
+            if (f.State == "보낸 파일" || f.State == "완료")
+            {
+                var path = f.LocalPath;
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) { Footnote.Text = "파일을 찾을 수 없습니다"; return; }
+                try
+                {
+                    if (f.State == "완료") Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                    else _core.OpenDownloads(path);
+                }
+                catch { Process.Start("explorer.exe", $"/select,\"{path}\""); }
+                return;
+            }
+
+            var dir = Store.DownloadDir(_core.Settings);
+            string dest;
+            if (Keyboard.Modifiers == ModifierKeys.Shift)
+            {
+                var dlg = new Microsoft.Win32.SaveFileDialog { FileName = f.Name, InitialDirectory = dir, Title = "다른 이름으로 저장" };
+                if (dlg.ShowDialog(this) != true) return;
+                dest = dlg.FileName;
+            }
+            else dest = Store.UniquePath(dir, f.Name);
+
+            try
+            {
+                await _core.DownloadFile(Message, f, dest);
+                _lastSaved = dest;
+                Footnote.Text = "저장했습니다 · 폴더 열기";
+                Footnote.ToolTip = dest;
+                Footnote.Cursor = Cursors.Hand;
+                Footnote.Foreground = (Brush)FindResource("Accent");
+            }
+            catch (Exception ex)
+            {
+                Footnote.Text = ex.Message;
+                Footnote.Foreground = (Brush)FindResource("Danger");
+            }
+        }
+    }
+}

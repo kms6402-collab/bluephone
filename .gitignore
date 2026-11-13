@@ -1,0 +1,8 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+/*.exe
+/dist/
+tools/icon-preview.png
