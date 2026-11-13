@@ -22,21 +22,21 @@
             <TextBlock x:Name="SubHeading" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
 
             <TextBlock Text="변경 사항" Style="{StaticResource Label}" Margin="0,18,0,8"/>
-            <Border Background="{StaticResource Canvas}" CornerRadius="8" Padding="14,12" MaxHeight="300">
+            <Border Background="{DynamicResource Canvas}" CornerRadius="8" Padding="14,12" MaxHeight="300">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <TextBlock x:Name="Notes" TextWrapping="Wrap" LineHeight="21" Foreground="{StaticResource Ink2}"/>
+                    <TextBlock x:Name="Notes" TextWrapping="Wrap" LineHeight="21" Foreground="{DynamicResource Ink2}"/>
                 </ScrollViewer>
             </Border>
 
             <StackPanel x:Name="ProgressPane" Margin="0,14,0,0" Visibility="Collapsed">
-                <ProgressBar x:Name="Bar" Height="4" Maximum="1" BorderThickness="0" Background="{StaticResource Line}" Foreground="{StaticResource Accent}"/>
+                <ProgressBar x:Name="Bar" Height="4" Maximum="1" BorderThickness="0" Background="{DynamicResource Line}" Foreground="{DynamicResource Accent}"/>
                 <TextBlock x:Name="ProgressText" Style="{StaticResource Caption}" Margin="0,6,0,0"/>
             </StackPanel>
-            <TextBlock x:Name="Error" Foreground="{StaticResource Danger}" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="Collapsed"/>
+            <TextBlock x:Name="Error" Foreground="{DynamicResource Danger}" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="Collapsed"/>
         </StackPanel>
 
         <DockPanel Grid.Row="2" Margin="24,20,24,20" LastChildFill="False">
-            <TextBlock x:Name="SkipLink" DockPanel.Dock="Left" VerticalAlignment="Center" Cursor="Hand" Foreground="{StaticResource Muted}"
+            <TextBlock x:Name="SkipLink" DockPanel.Dock="Left" VerticalAlignment="Center" Cursor="Hand" Foreground="{DynamicResource Muted}"
                        Text="이 버전 건너뛰기" MouseLeftButtonUp="Skip_Click" TextDecorations="Underline" FontSize="12"/>
             <Button x:Name="PrimaryBtn" DockPanel.Dock="Right" Style="{StaticResource Primary}" MinWidth="110" Height="34" Click="Primary_Click">
                 <TextBlock x:Name="PrimaryText"/>

@@ -201,6 +201,19 @@ namespace BluePhone
             return look;
         }
 
+        /// <summary>
+        /// 프로그램 전체(메인 창 · 쪽지 창 · 설정 · 대화 상자 · 메뉴)에 테마 적용.
+        /// 앱 리소스의 공통 색 이름을 덮어쓰므로 새로 여는 창도 자동으로 따름
+        /// </summary>
+        public static void ApplyGlobal(AppSettings s)
+        {
+            var app = Application.Current;
+            if (app == null) return;
+            var md = app.Resources.MergedDictionaries;
+            foreach (var old in md.Where(d => d.Contains(Marker)).ToList()) md.Remove(old);
+            md.Add(Build(s));
+        }
+
         /// <summary>창에 붙어 있는 테마 묶음 (없으면 null)</summary>
         public static ResourceDictionary Of(FrameworkElement e) =>
             e?.Resources.MergedDictionaries.FirstOrDefault(d => d.Contains(Marker));

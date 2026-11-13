@@ -26,7 +26,7 @@
         </DockPanel>
 
         <!-- recipients -->
-        <Border Grid.Row="1" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="18,4,12,8">
+        <Border Grid.Row="1" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="18,4,12,8">
             <DockPanel>
                 <TextBlock Text="받는 사람" Style="{StaticResource Caption}" VerticalAlignment="Top" Margin="0,6,12,0" DockPanel.Dock="Left"/>
                 <WrapPanel x:Name="Chips" VerticalAlignment="Center">
@@ -36,7 +36,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type local:Peer}">
-                                <Border Background="{StaticResource Canvas}" CornerRadius="12" Height="26" Padding="4,0,2,0" Margin="0,0,6,4"
+                                <Border Background="{DynamicResource Canvas}" CornerRadius="12" Height="26" Padding="4,0,2,0" Margin="0,0,6,4"
                                         ToolTip="{Binding Address}">
                                     <StackPanel Orientation="Horizontal">
                                         <Grid Width="18" Height="18" VerticalAlignment="Center">
@@ -53,9 +53,9 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <TextBlock x:Name="BroadcastInfo" Visibility="Collapsed" VerticalAlignment="Center" Margin="0,5,8,4" Foreground="{StaticResource Ink2}"/>
+                    <TextBlock x:Name="BroadcastInfo" Visibility="Collapsed" VerticalAlignment="Center" Margin="0,5,8,4" Foreground="{DynamicResource Ink2}"/>
                     <Button x:Name="AddBtn" Style="{StaticResource BtnBase}" Height="26" Padding="8,0" Margin="0,0,0,4" Click="AddTo_Click"
-                            Foreground="{StaticResource Accent}">
+                            Foreground="{DynamicResource Accent}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE710;" FontFamily="{StaticResource Glyph}" FontSize="10" VerticalAlignment="Center" Margin="0,1,5,0"/>
                             <TextBlock Text="추가" FontWeight="SemiBold"/>
@@ -66,7 +66,7 @@
         </Border>
 
         <!-- quote -->
-        <Border x:Name="QuoteBar" Grid.Row="2" Visibility="Collapsed" Margin="18,12,18,0" BorderBrush="{StaticResource LineStrong}" BorderThickness="2,0,0,0" Padding="10,2">
+        <Border x:Name="QuoteBar" Grid.Row="2" Visibility="Collapsed" Margin="18,12,18,0" BorderBrush="{DynamicResource LineStrong}" BorderThickness="2,0,0,0" Padding="10,2">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Style="{StaticResource Icon}" Width="22" Height="22" FontSize="8" Content="&#xE8BB;" Click="DropQuote_Click" ToolTip="인용 빼기"/>
                 <TextBlock x:Name="QuoteText" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" MaxHeight="36" TextWrapping="Wrap" VerticalAlignment="Center"/>
@@ -83,12 +83,12 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <Border BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" MinHeight="30" Padding="8,0,2,0" Margin="0,0,6,6"
+                    <Border BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6" MinHeight="30" Padding="8,0,2,0" Margin="0,0,6,6"
                             ToolTip="{Binding Path}">
                         <StackPanel Orientation="Horizontal">
                             <Image local:Media.Path="{Binding Thumb}" MaxHeight="72" MaxWidth="128" Margin="0,4,8,4" Cursor="Hand" Tag="{Binding Thumb}"
                                    MouseLeftButtonDown="Thumb_Click" ToolTip="누르면 크게 봅니다" Visibility="{Binding Thumb, Converter={StaticResource Vis}}"/>
-                            <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource Glyph}" FontSize="12" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                            <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource Glyph}" FontSize="12" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding Name}" MaxWidth="180" TextTrimming="CharacterEllipsis" Margin="6,0,6,0" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding SizeText}" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding Kind}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="6,0,0,0"/>
@@ -99,16 +99,16 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <Border x:Name="ScheduleBar" Grid.Row="4" VerticalAlignment="Bottom" Background="{StaticResource AccentSoft}" CornerRadius="6" Padding="10,5,4,5"
+        <Border x:Name="ScheduleBar" Grid.Row="4" VerticalAlignment="Bottom" Background="{DynamicResource AccentSoft}" CornerRadius="6" Padding="10,5,4,5"
                 Margin="16,0,16,6" Visibility="Collapsed">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Style="{StaticResource Icon}" Width="22" Height="22" FontSize="8" Content="&#xE8BB;" Click="ClearSchedule_Click"/>
-                <TextBlock x:Name="ScheduleText" Foreground="{StaticResource Accent}" VerticalAlignment="Center" FontSize="12.5"/>
+                <TextBlock x:Name="ScheduleText" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" FontSize="12.5"/>
             </DockPanel>
         </Border>
 
         <!-- footer -->
-        <Border Grid.Row="5" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,10,12,12">
+        <Border Grid.Row="5" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,10,12,12">
             <DockPanel>
                 <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE723;" FontSize="15" ToolTip="파일 첨부 — 모든 형식 · 폴더는 자동 압축 (끌어다 놓기, Ctrl+V 도 가능)" Click="Attach_Click"/>
                 <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE8C6;" FontSize="15" ToolTip="화면 캡처해서 첨부 (Ctrl+Alt+S)" Click="Capture_Click"/>
@@ -126,15 +126,15 @@
                 <Button x:Name="SendBtn" DockPanel.Dock="Right" Style="{StaticResource Primary}" Height="34" Padding="18,0" Click="Send_Click" MinWidth="92">
                     <TextBlock x:Name="SendText" Text="보내기"/>
                 </Button>
-                <TextBlock x:Name="Hint" Text="Ctrl+Enter" Foreground="{StaticResource Faint}" FontSize="11.5" VerticalAlignment="Center"
+                <TextBlock x:Name="Hint" Text="Ctrl+Enter" Foreground="{DynamicResource Faint}" FontSize="11.5" VerticalAlignment="Center"
                            HorizontalAlignment="Right" Margin="0,0,12,0" TextTrimming="CharacterEllipsis"/>
             </DockPanel>
         </Border>
 
         <!-- drop overlay -->
-        <Border x:Name="DropOverlay" Grid.RowSpan="6" Background="#E6F3F6FE" BorderBrush="{StaticResource Accent}" BorderThickness="1.5" Margin="8"
+        <Border x:Name="DropOverlay" Grid.RowSpan="6" Background="#E6F3F6FE" BorderBrush="{DynamicResource Accent}" BorderThickness="1.5" Margin="8"
                 CornerRadius="8" Visibility="Collapsed" IsHitTestVisible="False">
-            <TextBlock Text="여기에 놓으면 첨부됩니다" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+            <TextBlock Text="여기에 놓으면 첨부됩니다" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource Accent}" FontWeight="SemiBold"/>
         </Border>
     </Grid>
 </Window>

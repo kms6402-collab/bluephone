@@ -254,7 +254,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <ContentPresenter VerticalAlignment="Center" Margin="0,0,12,0"/>
-                        <Border x:Name="track" Grid.Column="1" Width="36" Height="20" CornerRadius="10" Background="#D5D9E0" VerticalAlignment="Center">
+                        <Border x:Name="track" Grid.Column="1" Width="36" Height="20" CornerRadius="10" Background="{DynamicResource LineStrong}" VerticalAlignment="Center">
                             <Ellipse x:Name="knob" Width="14" Height="14" Fill="White" HorizontalAlignment="Left" Margin="3,0">
                                 <Ellipse.Effect>
                                     <DropShadowEffect BlurRadius="3" ShadowDepth="0.5" Opacity="0.25"/>
@@ -363,7 +363,8 @@
     <Style x:Key="FlatItem" TargetType="ListBoxItem">
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
         <Setter Property="Margin" Value="6,0"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -394,7 +395,8 @@
     <Style x:Key="FlatList" TargetType="ListBox">
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="ItemContainerStyle" Value="{StaticResource FlatItem}"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource FlatItem}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
         <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -405,7 +407,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <Border x:Name="t" CornerRadius="3" Background="#C9CDD4" Margin="2,0"/>
+                    <Border x:Name="t" CornerRadius="3" Background="{DynamicResource LineStrong}" Margin="2,0"/>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="t" Property="Background" Value="#A9AEB8"/>

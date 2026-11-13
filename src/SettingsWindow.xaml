@@ -9,7 +9,7 @@
             <Setter Property="Margin" Value="0,26,0,12"/>
         </Style>
         <Style x:Key="Row" TargetType="Border">
-            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
             <Setter Property="Padding" Value="0,11"/>
         </Style>
@@ -45,16 +45,16 @@
                         <Ellipse x:Name="PhotoBg"/>
                         <TextBlock x:Name="PhotoInitial" Foreground="White" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <Ellipse><Ellipse.Fill><ImageBrush x:Name="PhotoBrush" Stretch="UniformToFill"/></Ellipse.Fill></Ellipse>
-                        <Border Width="24" Height="24" CornerRadius="12" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                        <Border Width="24" Height="24" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1"
                                 HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                            <TextBlock Text="&#xE722;" FontFamily="{StaticResource Glyph}" FontSize="11" Foreground="{StaticResource Ink2}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock Text="&#xE722;" FontFamily="{StaticResource Glyph}" FontSize="11" Foreground="{DynamicResource Ink2}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </Grid>
                     <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
                             <Button Style="{StaticResource Outline}" Content="사진 선택" Height="30" Click="PickPhoto_Click"/>
                             <Button x:Name="RemovePhotoBtn" Style="{StaticResource Ghost}" Content="삭제" Height="30" Margin="6,0,0,0" Click="RemovePhoto_Click"
-                                    Foreground="{StaticResource Danger}"/>
+                                    Foreground="{DynamicResource Danger}"/>
                         </StackPanel>
                         <TextBlock Text="JPG · PNG · BMP · GIF. 가운데를 정사각형으로 맞춰 동료들에게 보여집니다." Style="{StaticResource Help}" Margin="0,8,0,0"/>
                     </StackPanel>
@@ -167,7 +167,7 @@
                 <StackPanel Orientation="Horizontal">
                     <TextBox x:Name="AwayBox" Style="{StaticResource Field}" Width="64" HorizontalContentAlignment="Center"
                              PreviewTextInput="Digits_PreviewTextInput" MaxLength="3"/>
-                    <TextBlock Text="분 동안 입력이 없으면 자리 비움으로 전환" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource Ink2}"/>
+                    <TextBlock Text="분 동안 입력이 없으면 자리 비움으로 전환" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{DynamicResource Ink2}"/>
                 </StackPanel>
                 <TextBlock Text="0 으로 두면 자동 전환하지 않습니다" Style="{StaticResource Help}" Margin="0,6,0,0"/>
                 <TextBlock Text="자동응답" Style="{StaticResource Label}" Margin="0,16,0,6"/>
@@ -203,7 +203,7 @@
                 <!-- network -->
                 <TextBlock Text="네트워크" Style="{StaticResource Section}"/>
                 <DockPanel>
-                    <TextBlock Text="포트" VerticalAlignment="Center" Width="40" Foreground="{StaticResource Ink2}"/>
+                    <TextBlock Text="포트" VerticalAlignment="Center" Width="40" Foreground="{DynamicResource Ink2}"/>
                     <TextBox x:Name="PortBox" Style="{StaticResource Field}" Width="80" HorizontalAlignment="Left" HorizontalContentAlignment="Center"
                              PreviewTextInput="Digits_PreviewTextInput" MaxLength="5"/>
                     <TextBlock Text="모든 PC가 같은 포트를 써야 합니다 (UDP·TCP)" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap"/>
@@ -217,7 +217,7 @@
 
                 <!-- about -->
                 <TextBlock Text="정보" Style="{StaticResource Section}"/>
-                <Border Background="{StaticResource Canvas}" CornerRadius="8" Padding="14,12">
+                <Border Background="{DynamicResource Canvas}" CornerRadius="8" Padding="14,12">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <ContentControl ContentTemplate="{StaticResource LogoMark}" Focusable="False"/>
@@ -245,7 +245,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <Border Grid.Row="2" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="24,12">
+        <Border Grid.Row="2" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="24,12">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Style="{StaticResource Outline}" Content="취소" MinWidth="76" Click="Cancel_Click" IsCancel="True"/>
                 <Button Style="{StaticResource Primary}" Content="저장" MinWidth="76" Margin="8,0,0,0" Click="Save_Click"/>

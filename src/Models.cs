@@ -131,13 +131,14 @@ namespace BluePhone
         public string LocalPath
         {
             get => _local;
-            set { if (Set(ref _local, value)) { Raise(nameof(PreviewPath)); Raise(nameof(CanPreviewNow)); } }
+            set { if (Set(ref _local, value)) { Raise(nameof(PreviewPath)); Raise(nameof(CanPreviewNow)); Raise(nameof(HasPreview)); } }
         }
 
         [ScriptIgnore] public string SizeText => FormatSize(Size);
         /// <summary>바로 보기 이미지 (이미지 파일이 내 PC에 있을 때)</summary>
         [ScriptIgnore] public string PreviewPath => Media.IsImage(Name) && Media.Exists(LocalPath) ? LocalPath : null;
         /// <summary>미리 보기 창으로 볼 수 있는지 (이미지 · 텍스트 · 동영상, 내 PC에 있을 때)</summary>
+        [ScriptIgnore] public bool HasPreview => PreviewPath != null;
         [ScriptIgnore] public bool CanPreviewNow => Media.CanPreview(Name) && Media.Exists(LocalPath);
         [ScriptIgnore] public string State { get => _state; set => Set(ref _state, value); }
         [ScriptIgnore] public double Progress { get => _progress; set => Set(ref _progress, value); }

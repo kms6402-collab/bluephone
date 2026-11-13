@@ -355,6 +355,19 @@ namespace BluePhone
             Add("동료 다시 찾기", () => _core.Rescan());
             Add("받은 파일 폴더 열기", () => _core.OpenDownloads());
             Add("모두 읽음 처리", _core.MarkAllRead);
+            var theme = new MenuItem { Header = "테마" };
+            foreach (var t in ChatLook.Themes)
+            {
+                var tt = t;
+                bool on = (_core.Settings.ChatTheme ?? "light") == t.Id;
+                var sw = new Grid { Width = 16, Height = 16 };
+                sw.Children.Add(new System.Windows.Shapes.Ellipse { Fill = new System.Windows.Media.SolidColorBrush(t.Bg), Stroke = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x40, 0x80, 0x80, 0x80)), StrokeThickness = 1 });
+                sw.Children.Add(new System.Windows.Shapes.Ellipse { Width = 8, Height = 8, Fill = new System.Windows.Media.SolidColorBrush(t.Out) });
+                var mi = new MenuItem { Header = on ? t.Name + "  ✓" : t.Name, Icon = sw, FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal };
+                mi.Click += (o, ev) => _core.SetChatLook(theme: tt.Id);
+                theme.Items.Add(mi);
+            }
+            m.Items.Add(theme);
             var blocked = _core.Settings.Blocked;
             var bm = new MenuItem { Header = blocked.Count > 0 ? $"차단한 동료 ({blocked.Count})" : "차단한 동료" };
             if (blocked.Count == 0) bm.Items.Add(new MenuItem { Header = "차단한 동료가 없습니다", IsEnabled = false });

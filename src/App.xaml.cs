@@ -193,6 +193,7 @@ namespace BluePhone
 
             CreateTray();
             ApplyHotkey();
+            ChatLook.ApplyGlobal(Settings);
             _main = new MainWindow(this);
             if (!startHidden) _main.Show();
             WarmUpChat();
@@ -843,6 +844,8 @@ namespace BluePhone
             Native.BringToFront(w);
             if (attach != null) w.Attach(attach);
             foreach (var m in History.Where(x => x.Chat && !x.Outgoing && !x.Read && x.PeerId == p.Id).ToList()) MarkRead(m);
+            // 예전에 받은 이미지 중 아직 안 받은 것도 바로 보이도록 (최근 것부터)
+            foreach (var m in History.Where(x => !x.Outgoing && x.PeerId == p.Id && x.Files.Count > 0).Take(30).ToList()) AutoFetchImages(m);
             return w;
         }
 
@@ -852,6 +855,7 @@ namespace BluePhone
             if (theme != null) Settings.ChatTheme = theme;
             if (font != null) Settings.ChatFont = font;
             if (size.HasValue) Settings.ChatFontSize = size.Value;
+            ChatLook.ApplyGlobal(Settings);
             foreach (var w in _chats.Values) w.ApplyLook();
             Store.SaveSettings(Settings);
         }
@@ -896,7 +900,8 @@ namespace BluePhone
         async void AutoFetchImages(ChatMessage m)
         {
             if (!Settings.AutoImage) return;
-            foreach (var f in m.Files.Where(x => Media.IsImage(x.Name) && x.Size > 0 && x.Size <= 20L * 1024 * 1024 && string.IsNullOrEmpty(x.LocalPath)).ToList())
+            foreach (var f in m.Files.Where(x => Media.IsImage(x.Name) && x.Size > 0 && x.Size <= 20L * 1024 * 1024
+                                                 && !Media.Exists(x.LocalPath) && x.State != "받는 중" && x.State != "실패").ToList())
             {
                 try
                 {

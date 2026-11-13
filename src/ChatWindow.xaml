@@ -57,6 +57,10 @@
                     <Setter TargetName="folder" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="fb" Property="Background" Value="#26FFFFFF"/>
                 </DataTrigger>
+                <DataTrigger Binding="{Binding HasPreview}" Value="True">
+                    <Setter TargetName="act" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="folder" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
@@ -174,7 +178,7 @@
                     <Ellipse x:Name="HAvatar"/>
                     <TextBlock x:Name="HInitial" Foreground="White" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <Ellipse><Ellipse.Fill><ImageBrush x:Name="HPhoto" Stretch="UniformToFill"/></Ellipse.Fill></Ellipse>
-                    <Ellipse Width="11" Height="11" Fill="White" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,-2"/>
+                    <Ellipse Width="11" Height="11" Fill="{DynamicResource Ct.Panel}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,-2"/>
                     <Ellipse x:Name="HDot" Width="7" Height="7" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
                 </Grid>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">

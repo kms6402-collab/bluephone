@@ -20,16 +20,16 @@
                     <TextBlock Text="{Binding Initial}" Foreground="White" FontWeight="SemiBold" FontSize="13"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <Ellipse><Ellipse.Fill><ImageBrush ImageSource="{Binding AvatarImage}" Stretch="UniformToFill"/></Ellipse.Fill></Ellipse>
-                    <Ellipse Width="12" Height="12" Fill="White" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,-2"/>
+                    <Ellipse Width="12" Height="12" Fill="{DynamicResource Surface}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,-2"/>
                     <Ellipse Width="8" Height="8" Fill="{Binding StatusBrush}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,0"/>
                 </Grid>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
                     <TextBlock TextTrimming="CharacterEllipsis">
-                        <Run Text="{Binding DisplayName, Mode=OneWay}" FontWeight="SemiBold"/><Run Text="{Binding RealNameHint, Mode=OneWay, StringFormat='  {0}'}" Foreground="{StaticResource Faint}" FontSize="12"/>
+                        <Run Text="{Binding DisplayName, Mode=OneWay}" FontWeight="SemiBold"/><Run Text="{Binding RealNameHint, Mode=OneWay, StringFormat='  {0}'}" Foreground="{DynamicResource Faint}" FontSize="12"/>
                     </TextBlock>
                     <TextBlock Text="{Binding SubText}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
                 </StackPanel>
-                <Ellipse Grid.Column="2" Width="7" Height="7" Fill="{StaticResource Accent}" Margin="0,0,14,0"
+                <Ellipse Grid.Column="2" Width="7" Height="7" Fill="{DynamicResource Accent}" Margin="0,0,14,0"
                          Visibility="{Binding HasUnread, Converter={StaticResource Vis}}"/>
             </Grid>
         </DataTemplate>
@@ -48,21 +48,21 @@
                 <StackPanel Grid.Column="1" Margin="0,10,12,10">
                     <Grid>
                         <DockPanel Margin="0,0,64,0" LastChildFill="True">
-                            <Border DockPanel.Dock="Right" Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
+                            <Border DockPanel.Dock="Right" Background="{DynamicResource AccentSoft}" CornerRadius="4" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
                                     Visibility="{Binding Chat, Converter={StaticResource Vis}}">
-                                <TextBlock Text="대화" Foreground="{StaticResource Accent}" FontSize="10.5" FontWeight="SemiBold"/>
+                                <TextBlock Text="대화" Foreground="{DynamicResource Accent}" FontSize="10.5" FontWeight="SemiBold"/>
                             </Border>
                             <TextBlock Text="{Binding Who}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                         </DockPanel>
-                        <TextBlock Text="{Binding TimeText}" HorizontalAlignment="Right" Foreground="{StaticResource Faint}" FontSize="11.5"/>
+                        <TextBlock Text="{Binding TimeText}" HorizontalAlignment="Right" Foreground="{DynamicResource Faint}" FontSize="11.5"/>
                     </Grid>
                     <DockPanel Margin="0,2,0,0">
-                        <Ellipse DockPanel.Dock="Right" Width="7" Height="7" Fill="{StaticResource Accent}" Margin="8,0,2,0"
+                        <Ellipse DockPanel.Dock="Right" Width="7" Height="7" Fill="{DynamicResource Accent}" Margin="8,0,2,0"
                                  Visibility="{Binding IsUnread, Converter={StaticResource Vis}}"/>
-                        <TextBlock x:Name="me" DockPanel.Dock="Left" Text="나:" Foreground="{StaticResource Faint}" Margin="0,0,4,0"/>
-                        <TextBlock Text="{Binding Preview, Mode=OneWay}" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Ink2}"/>
+                        <TextBlock x:Name="me" DockPanel.Dock="Left" Text="나:" Foreground="{DynamicResource Faint}" Margin="0,0,4,0"/>
+                        <TextBlock Text="{Binding Preview, Mode=OneWay}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Ink2}"/>
                     </DockPanel>
-                    <TextBlock x:Name="meta" Text="{Binding Meta}" FontSize="11.5" Foreground="{StaticResource Faint}" Margin="0,3,0,0"
+                    <TextBlock x:Name="meta" Text="{Binding Meta}" FontSize="11.5" Foreground="{DynamicResource Faint}" Margin="0,3,0,0"
                                Visibility="{Binding Meta, Converter={StaticResource Vis}}"/>
                 </StackPanel>
             </Grid>
@@ -71,7 +71,7 @@
                     <Setter TargetName="me" Property="Visibility" Value="Collapsed"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsProblem}" Value="True">
-                    <Setter TargetName="meta" Property="Foreground" Value="{StaticResource Danger}"/>
+                    <Setter TargetName="meta" Property="Foreground" Value="{DynamicResource Danger}"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -82,8 +82,8 @@
                     <ControlTemplate TargetType="GroupItem">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="18,12,0,4">
-                                <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource Muted}"/>
-                                <TextBlock Text="{Binding ItemCount}" FontSize="11.5" Foreground="{StaticResource Faint}" Margin="6,0,0,0"/>
+                                <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource Muted}"/>
+                                <TextBlock Text="{Binding ItemCount}" FontSize="11.5" Foreground="{DynamicResource Faint}" Margin="6,0,0,0"/>
                             </StackPanel>
                             <ItemsPresenter/>
                         </StackPanel>
@@ -93,7 +93,7 @@
         </Style>
     </Window.Resources>
 
-    <Grid Background="{StaticResource Surface}">
+    <Grid Background="{DynamicResource Surface}">
         <Grid.RowDefinitions>
             <RowDefinition Height="40"/>
             <RowDefinition Height="Auto"/>
@@ -109,7 +109,7 @@
                 <Button x:Name="MoreBtn" Style="{StaticResource Chrome}" FontSize="13" ToolTip="메뉴" Click="More_Click">
                     <Grid>
                         <TextBlock Text="&#xE712;"/>
-                        <Ellipse x:Name="MoreDot" Width="7" Height="7" Fill="{StaticResource Danger}" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        <Ellipse x:Name="MoreDot" Width="7" Height="7" Fill="{DynamicResource Danger}" HorizontalAlignment="Right" VerticalAlignment="Top"
                                  Margin="0,-3,-5,0" Visibility="Collapsed" IsHitTestVisible="False"/>
                     </Grid>
                 </Button>
@@ -119,8 +119,8 @@
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Margin="14,0,0,0" VerticalAlignment="Center">
                 <ContentControl ContentTemplate="{StaticResource LogoMark}" Focusable="False"/>
                 <TextBlock Text="파란전화기" FontWeight="SemiBold" Margin="9,0,0,0" VerticalAlignment="Center"/>
-                <TextBlock x:Name="VersionLabel" Foreground="{StaticResource Faint}" FontSize="11.5" Margin="7,1,0,0" VerticalAlignment="Center"/>
-                <Border x:Name="UpdateBadge" Background="{StaticResource Accent}" CornerRadius="10" Padding="8,2,9,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                <TextBlock x:Name="VersionLabel" Foreground="{DynamicResource Faint}" FontSize="11.5" Margin="7,1,0,0" VerticalAlignment="Center"/>
+                <Border x:Name="UpdateBadge" Background="{DynamicResource Accent}" CornerRadius="10" Padding="8,2,9,2" Margin="8,0,0,0" VerticalAlignment="Center"
                         Visibility="Collapsed" Cursor="Hand" WindowChrome.IsHitTestVisibleInChrome="True" MouseLeftButtonUp="UpdateBadge_Click">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE896;" FontFamily="{StaticResource Glyph}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="0,1,5,0"/>
@@ -152,7 +152,7 @@
                 <StackPanel Orientation="Horizontal">
                     <Ellipse x:Name="MyDot" Width="8" Height="8" VerticalAlignment="Center"/>
                     <TextBlock x:Name="MyStatus" Margin="7,0,6,0" FontSize="12.5" VerticalAlignment="Center"/>
-                    <TextBlock Text="&#xE70D;" FontFamily="{StaticResource Glyph}" FontSize="9" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                    <TextBlock Text="&#xE70D;" FontFamily="{StaticResource Glyph}" FontSize="9" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
         </Grid>
@@ -160,26 +160,26 @@
         <!-- search -->
         <Grid Grid.Row="2" Margin="14,0,14,10">
             <TextBox x:Name="Search" Style="{StaticResource Field}" Tag="이름, 부서, IP 검색" Padding="30,0,28,0" Height="34"
-                     Background="{StaticResource Canvas}" BorderBrush="Transparent" TextChanged="Search_Changed"/>
-            <TextBlock Text="&#xE721;" FontFamily="{StaticResource Glyph}" FontSize="13" Foreground="{StaticResource Muted}"
+                     Background="{DynamicResource Canvas}" BorderBrush="Transparent" TextChanged="Search_Changed"/>
+            <TextBlock Text="&#xE721;" FontFamily="{StaticResource Glyph}" FontSize="13" Foreground="{DynamicResource Muted}"
                        VerticalAlignment="Center" Margin="11,0,0,0" IsHitTestVisible="False"/>
             <Button x:Name="ClearSearch" Style="{StaticResource Icon}" Width="26" Height="26" FontSize="10" Content="&#xE894;" HorizontalAlignment="Right"
                     Margin="0,0,4,0" Visibility="Collapsed" Click="ClearSearch_Click" ToolTip="지우기"/>
         </Grid>
 
         <!-- tabs -->
-        <Border Grid.Row="3" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="18,0,0,0">
+        <Border Grid.Row="3" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="18,0,0,0">
             <StackPanel Orientation="Horizontal" Height="34">
                 <RadioButton x:Name="TabPeers" Style="{StaticResource Tab}" IsChecked="True" Checked="Tab_Changed">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="동료" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="PeerCount" Margin="5,0,0,0" Foreground="{StaticResource Faint}"/>
+                        <TextBlock x:Name="PeerCount" Margin="5,0,0,0" Foreground="{DynamicResource Faint}"/>
                     </StackPanel>
                 </RadioButton>
                 <RadioButton x:Name="TabHistory" Style="{StaticResource Tab}" Checked="Tab_Changed">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="쪽지함" FontWeight="SemiBold"/>
-                        <Border x:Name="UnreadBadge" Background="{StaticResource Accent}" CornerRadius="8" MinWidth="16" Height="16" Padding="5,0" Margin="6,0,0,0" Visibility="Collapsed">
+                        <Border x:Name="UnreadBadge" Background="{DynamicResource Accent}" CornerRadius="8" MinWidth="16" Height="16" Padding="5,0" Margin="6,0,0,0" Visibility="Collapsed">
                             <TextBlock x:Name="UnreadText" Foreground="White" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </StackPanel>
@@ -187,7 +187,7 @@
                 <RadioButton x:Name="TabChats" Style="{StaticResource Tab}" Checked="Tab_Changed">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="대화함" FontWeight="SemiBold"/>
-                        <Border x:Name="ChatBadge" Background="{StaticResource Accent}" CornerRadius="8" MinWidth="16" Height="16" Padding="5,0" Margin="6,0,0,0" Visibility="Collapsed">
+                        <Border x:Name="ChatBadge" Background="{DynamicResource Accent}" CornerRadius="8" MinWidth="16" Height="16" Padding="5,0" Margin="6,0,0,0" Visibility="Collapsed">
                             <TextBlock x:Name="ChatUnreadText" Foreground="White" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </StackPanel>
@@ -268,20 +268,20 @@
                                 <Ellipse Fill="{Binding AvatarBrush}"/>
                                 <TextBlock Text="{Binding Initial}" Foreground="White" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 <Ellipse><Ellipse.Fill><ImageBrush ImageSource="{Binding AvatarImage}" Stretch="UniformToFill"/></Ellipse.Fill></Ellipse>
-                                <Ellipse Width="12" Height="12" Fill="White" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,-2"/>
+                                <Ellipse Width="12" Height="12" Fill="{DynamicResource Surface}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,-2"/>
                                 <Ellipse Width="8" Height="8" Fill="{Binding StatusBrush}" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
                             </Grid>
                             <StackPanel Grid.Column="1" Margin="0,10,14,10" VerticalAlignment="Center">
                                 <Grid>
                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,64,0"/>
-                                    <TextBlock Text="{Binding TimeText}" HorizontalAlignment="Right" Foreground="{StaticResource Faint}" FontSize="11.5"/>
+                                    <TextBlock Text="{Binding TimeText}" HorizontalAlignment="Right" Foreground="{DynamicResource Faint}" FontSize="11.5"/>
                                 </Grid>
                                 <DockPanel Margin="0,3,0,0">
-                                    <Border DockPanel.Dock="Right" Background="{StaticResource Accent}" CornerRadius="8" MinWidth="18" Height="18" Padding="5,0" Margin="8,0,0,0"
+                                    <Border DockPanel.Dock="Right" Background="{DynamicResource Accent}" CornerRadius="8" MinWidth="18" Height="18" Padding="5,0" Margin="8,0,0,0"
                                             Visibility="{Binding HasUnread, Converter={StaticResource Vis}}">
                                         <TextBlock Text="{Binding UnreadText}" Foreground="White" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
-                                    <TextBlock local:Emoji.Text="{Binding Preview}" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Ink2}"/>
+                                    <TextBlock local:Emoji.Text="{Binding Preview}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Ink2}"/>
                                 </DockPanel>
                             </StackPanel>
                         </Grid>
@@ -304,7 +304,7 @@
         </Grid>
 
         <!-- actions -->
-        <Border Grid.Row="5" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,10,12,12">
+        <Border Grid.Row="5" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,10,12,12">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
