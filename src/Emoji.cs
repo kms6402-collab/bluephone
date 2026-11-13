@@ -147,8 +147,6 @@ namespace BluePhone
         public static void ShowPicker(FrameworkElement anchor, TextBox target)
         {
             Load();
-            var surface = (Brush)Application.Current.FindResource("Surface");
-            var line = (Brush)Application.Current.FindResource("Line");
             var popup = new Popup
             {
                 PlacementTarget = anchor, Placement = PlacementMode.Top, StaysOpen = false, AllowsTransparency = true,
@@ -156,13 +154,17 @@ namespace BluePhone
             };
             var root = new Border
             {
-                Background = surface, BorderBrush = line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10),
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(8), Width = 316, Margin = new Thickness(8),
                 Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 3, Opacity = 0.16 },
             };
             // 팝업은 창의 글꼴을 물려받지 않으므로 직접 지정 (지정하지 않으면 한글이 네모로 보임)
             TextElement.SetFontFamily(root, (FontFamily)Application.Current.FindResource("UI"));
-            TextElement.SetForeground(root, (Brush)Application.Current.FindResource("Ink"));
+            // 대화 창 테마가 있으면 그 색을 따름 (쪽지 쓰기 창에서는 기본 색)
+            ChatLook.Attach(root, ChatLook.Of(Window.GetWindow(anchor)));
+            root.SetResourceReference(Border.BackgroundProperty, "Surface");
+            root.SetResourceReference(Border.BorderBrushProperty, "Line");
+            root.SetResourceReference(TextElement.ForegroundProperty, "Ink");
             var stack = new StackPanel();
             var tabs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 0, 0, 6) };
             var body = new ContentControl { Height = 214 };
@@ -212,8 +214,8 @@ namespace BluePhone
             stack.Children.Add(new TextBlock
             {
                 Text = "여러 개를 연달아 고를 수 있어요 · Twemoji (CC-BY 4.0)", FontSize = 10.5, Margin = new Thickness(4, 6, 0, 0),
-                Foreground = (Brush)Application.Current.FindResource("Faint"),
             });
+            ((TextBlock)stack.Children[stack.Children.Count - 1]).SetResourceReference(TextBlock.ForegroundProperty, "Faint");
             root.Child = stack;
             popup.Child = root;
             popup.Closed += (s, e) => target.Focus();

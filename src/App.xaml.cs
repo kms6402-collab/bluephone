@@ -195,6 +195,7 @@ namespace BluePhone
             ApplyHotkey();
             _main = new MainWindow(this);
             if (!startHidden) _main.Show();
+            WarmUpChat();
 
             if (netError != null)
             {
@@ -352,7 +353,7 @@ namespace BluePhone
             }
             catch (Exception ex)
             {
-                return manual ? "업데이트 서버에 연결하지 못했습니다: " + ex.Message : null;
+                return manual ? "업데이트를 확인하지 못했습니다: " + ex.Message : null;
             }
             finally { _checking = false; }
         }
@@ -804,6 +805,29 @@ namespace BluePhone
         public ChatWindow LastChat { get; set; }
 
         /// <summary>1:1 대화 창 (동료마다 하나)</summary>
+        /// <summary>
+        /// 처음 여는 대화 창이 느리지 않도록, 시작 후 한가할 때 대화 창 화면 구성 · 이모지 이미지를 미리 한 번 준비해 둠
+        /// (창은 화면에 띄우지 않음)
+        /// </summary>
+        void WarmUpChat()
+        {
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                try
+                {
+                    Emoji.Split("\U0001F600");
+                    var w = new ChatWindow(this, new Peer { Id = "warmup", Name = "warmup" });
+                    if (w.Content is FrameworkElement root)
+                    {
+                        root.Measure(new Size(420, 600));
+                        root.Arrange(new Rect(0, 0, 420, 600));
+                    }
+                    w.Close();
+                }
+                catch { }
+            }));
+        }
+
         public ChatWindow OpenChat(Peer p, string attach = null)
         {
             if (p == null) return null;

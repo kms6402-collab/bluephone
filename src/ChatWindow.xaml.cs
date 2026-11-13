@@ -29,14 +29,16 @@ namespace BluePhone
         {
             _core = core;
             Peer = peer;
-            ChatLook.Apply(this, core.Settings);
+            _look = ChatLook.Apply(this, core.Settings);
             InitializeComponent();
             Chrome.Apply(this, caption: 58);
             Chrome.NoMaximize(this);
 
+            // 처음에는 최근 대화만 (오래 쌓인 기록이 많아도 창이 바로 열리도록) — '이전 대화 더 보기'로 늘림
+            _since = SinceFor(PageSize);
             _view = new ListCollectionView(core.History)
             {
-                Filter = o => o is ChatMessage m && m.Chat && m.Involves(peer.Id),   // 쪽지는 쪽지함에서, 대화 창은 1:1 대화만
+                Filter = o => o is ChatMessage m && m.Chat && m.Ts >= _since && m.Involves(peer.Id),   // 쪽지는 쪽지함에서, 대화 창은 1:1 대화만
             };
             _view.SortDescriptions.Add(new SortDescription(nameof(ChatMessage.Ts), ListSortDirection.Ascending));
             List.ItemsSource = _view;
@@ -49,11 +51,19 @@ namespace BluePhone
                     else if (string.IsNullOrEmpty(f.State) && !string.IsNullOrEmpty(f.LocalPath) && File.Exists(f.LocalPath)) f.State = "완료";
                 }
 
-            ((INotifyCollectionChanged)_view).CollectionChanged += (s, e) => { RefreshEmpty(); ScrollToEnd(); };
+            ((INotifyCollectionChanged)_view).CollectionChanged += (s, e) => { RefreshEmpty(); if (e.Action == NotifyCollectionChangedAction.Add) ScrollToEnd(); };
             peer.PropertyChanged += Peer_PropertyChanged;
             Closed += (s, e) => peer.PropertyChanged -= Peer_PropertyChanged;
             RefreshHeader();
             RefreshEmpty();
+            RefreshMore();
+            // 이 창 안의 오른쪽 클릭 메뉴도 테마 색을 따르도록
+            AddHandler(ContextMenuOpeningEvent, new ContextMenuEventHandler((s, e) =>
+            {
+                for (var d = e.OriginalSource as DependencyObject; d != null;
+                     d = d is Visual || d is System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+                    if (d is FrameworkElement fe && fe.ContextMenu != null) { ChatLook.Attach(fe.ContextMenu, _look); break; }
+            }), true);
             UpdateSendState();
 
             Input.TextChanged += (s, e) => UpdateSendState();
@@ -208,7 +218,38 @@ namespace BluePhone
 
         // ───────────── 꾸미기 ─────────────
 
-        public void ApplyLook() => ChatLook.Apply(this, _core.Settings);
+        ResourceDictionary _look;
+
+        public void ApplyLook() => _look = ChatLook.Apply(this, _core.Settings);
+
+        // ───────────── 최근 대화만 먼저 ─────────────
+
+        const int PageSize = 300;
+        long _since;
+        int _shown = PageSize;
+
+        /// <summary>최근 n개의 대화가 들어가는 시작 시각</summary>
+        long SinceFor(int n)
+        {
+            var ts = _core.History.Where(m => m.Chat && m.Involves(Peer.Id)).Select(m => m.Ts).OrderByDescending(t => t).Skip(n - 1).FirstOrDefault();
+            return ts;   // 대화가 n개보다 적으면 0 → 전부
+        }
+
+        void RefreshMore()
+        {
+            bool more = _since > 0 && _core.History.Any(m => m.Chat && m.Ts < _since && m.Involves(Peer.Id));
+            MoreBtn.Visibility = more ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        void More_Click(object sender, RoutedEventArgs e)
+        {
+            var first = List.Items.Count > 0 ? List.Items[0] : null;
+            _shown += PageSize;
+            _since = SinceFor(_shown);
+            _view.Refresh();
+            RefreshMore();
+            if (first != null) Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => List.ScrollIntoView(first)));
+        }
 
         void Zoom(int step)
         {
@@ -220,14 +261,15 @@ namespace BluePhone
         {
             var s = _core.Settings;
             var m = new ContextMenu { PlacementTarget = LookBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+            ChatLook.Attach(m, _look);
 
             var theme = new MenuItem { Header = "테마" };
             foreach (var t in ChatLook.Themes)
             {
                 var tt = t;
                 var sw = new Grid { Width = 16, Height = 16 };
-                sw.Children.Add(new System.Windows.Shapes.Ellipse { Fill = (Brush)new BrushConverter().ConvertFromString(t.Bg), Stroke = (Brush)FindResource("LineStrong"), StrokeThickness = 1 });
-                sw.Children.Add(new System.Windows.Shapes.Ellipse { Width = 8, Height = 8, Fill = (Brush)new BrushConverter().ConvertFromString(t.Out) });
+                sw.Children.Add(new System.Windows.Shapes.Ellipse { Fill = new SolidColorBrush(t.Bg), Stroke = new SolidColorBrush(Color.FromArgb(0x40, 0x80, 0x80, 0x80)), StrokeThickness = 1 });
+                sw.Children.Add(new System.Windows.Shapes.Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(t.Out) });
                 bool on = (s.ChatTheme ?? "light") == t.Id;
                 var mi = new MenuItem { Header = on ? t.Name + "  ✓" : t.Name, Icon = sw, FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal };
                 mi.Click += (o, ev) => _core.SetChatLook(theme: tt.Id);

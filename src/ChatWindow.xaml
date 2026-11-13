@@ -20,13 +20,13 @@
                             <TextBlock Text="{Binding State}" FontSize="11.5" Margin="6,0,0,0"/>
                         </StackPanel>
                         <ProgressBar x:Name="bar" Value="{Binding Progress, Mode=OneWay}" Maximum="1" Height="3" Margin="0,4,0,0" BorderThickness="0"
-                                     Background="#22000000" Foreground="{StaticResource Accent}" Visibility="Collapsed"/>
+                                     Background="#22000000" Foreground="{DynamicResource Accent}" Visibility="Collapsed"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
                         <Button x:Name="act" Style="{StaticResource Outline}" Height="26" Padding="9,0" Content="받기" Tag="{Binding}" Click="FileAction_Click"/>
                         <Button x:Name="folder" Style="{StaticResource Outline}" Height="26" Width="28" Padding="0" Margin="4,0,0,0" Tag="{Binding}"
                                 Click="FileFolder_Click" Visibility="Collapsed" ToolTip="폴더에서 보기">
-                            <TextBlock Text="&#xE838;" FontFamily="{StaticResource Glyph}" FontSize="12" Foreground="{StaticResource Ink2}"/>
+                            <TextBlock Text="&#xE838;" FontFamily="{StaticResource Glyph}" FontSize="12" Foreground="{DynamicResource Ink2}"/>
                         </Button>
                     </StackPanel>
                 </Grid>
@@ -64,15 +64,15 @@
                 </Grid>
                 <StackPanel x:Name="col" Grid.Column="1" HorizontalAlignment="Left">
                     <StackPanel x:Name="tags" Orientation="Horizontal" Margin="2,0,0,3">
-                        <Border Background="{StaticResource DangerSoft}" CornerRadius="4" Padding="5,0" Margin="0,0,4,0"
+                        <Border Background="{DynamicResource DangerSoft}" CornerRadius="4" Padding="5,0" Margin="0,0,4,0"
                                 Visibility="{Binding Urgent, Converter={StaticResource Vis}}">
-                            <TextBlock Text="긴급" Foreground="{StaticResource Danger}" FontSize="11" FontWeight="SemiBold"/>
+                            <TextBlock Text="긴급" Foreground="{DynamicResource Danger}" FontSize="11" FontWeight="SemiBold"/>
                         </Border>
-                        <Border Background="{StaticResource Hover}" CornerRadius="4" Padding="5,0" Margin="0,0,4,0"
+                        <Border Background="{DynamicResource Hover}" CornerRadius="4" Padding="5,0" Margin="0,0,4,0"
                                 Visibility="{Binding IsNote, Converter={StaticResource Vis}}" ToolTip="쪽지 창으로 주고받은 쪽지">
-                            <TextBlock Text="쪽지" Foreground="{StaticResource Muted}" FontSize="11" FontWeight="SemiBold"/>
+                            <TextBlock Text="쪽지" Foreground="{DynamicResource Muted}" FontSize="11" FontWeight="SemiBold"/>
                         </Border>
-                        <TextBlock x:Name="grp" FontSize="11" Foreground="{StaticResource Faint}" Text="{Binding Who, StringFormat='여러 명에게 · {0}'}" Visibility="Collapsed"/>
+                        <TextBlock x:Name="grp" FontSize="11" Foreground="{DynamicResource Faint}" Text="{Binding Who, StringFormat='여러 명에게 · {0}'}" Visibility="Collapsed"/>
                     </StackPanel>
                     <Border x:Name="bubble" Background="{DynamicResource Ct.In}" TextElement.Foreground="{DynamicResource Ct.InText}"
                             CornerRadius="14,14,14,4" Padding="12,8" MaxWidth="300" HorizontalAlignment="Left">
@@ -114,7 +114,7 @@
                     <Setter TargetName="bubble" Property="Opacity" Value="0.6"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsProblem}" Value="True">
-                    <Setter TargetName="meta" Property="Foreground" Value="{StaticResource Danger}"/>
+                    <Setter TargetName="meta" Property="Foreground" Value="{DynamicResource Danger}"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -183,6 +183,8 @@
         <ListBox x:Name="List" Grid.Row="1" ItemTemplate="{StaticResource BubbleTpl}" ItemContainerStyle="{StaticResource BubbleItem}"
                  BorderThickness="0" Background="{DynamicResource Ct.Bg}" Padding="0,10,0,10"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.ScrollUnit="Pixel" IsSynchronizedWithCurrentItem="False"/>
+        <Button x:Name="MoreBtn" Grid.Row="1" Style="{StaticResource Outline}" Height="28" Padding="12,0" FontSize="12" Margin="0,8,0,0"
+                VerticalAlignment="Top" HorizontalAlignment="Center" Visibility="Collapsed" Click="More_Click" Content="이전 대화 더 보기"/>
         <TextBlock x:Name="Empty" Grid.Row="1" Text="아직 주고받은 대화가 없어요" Style="{StaticResource Caption}" Foreground="{DynamicResource Ct.Sub}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
         <!-- composer -->
@@ -204,10 +206,10 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <Border x:Name="ScheduleBar" Background="{StaticResource AccentSoft}" CornerRadius="6" Padding="10,5,4,5" Margin="0,0,0,8" Visibility="Collapsed">
+                <Border x:Name="ScheduleBar" Background="{DynamicResource AccentSoft}" CornerRadius="6" Padding="10,5,4,5" Margin="0,0,0,8" Visibility="Collapsed">
                     <DockPanel>
                         <Button DockPanel.Dock="Right" Style="{StaticResource Icon}" Width="22" Height="22" FontSize="8" Content="&#xE8BB;" Click="ClearSchedule_Click"/>
-                        <TextBlock x:Name="ScheduleText" Foreground="{StaticResource Accent}" VerticalAlignment="Center" FontSize="12.5"/>
+                        <TextBlock x:Name="ScheduleText" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" FontSize="12.5"/>
                     </DockPanel>
                 </Border>
                 <TextBox x:Name="Input" Style="{StaticResource Field}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40" MaxHeight="160"
@@ -230,9 +232,9 @@
             </StackPanel>
         </Border>
 
-        <Border x:Name="DropOverlay" Grid.RowSpan="3" Background="#E6F3F6FE" BorderBrush="{StaticResource Accent}" BorderThickness="1.5" Margin="8"
+        <Border x:Name="DropOverlay" Grid.RowSpan="3" Background="{DynamicResource Ct.Overlay}" BorderBrush="{DynamicResource Accent}" BorderThickness="1.5" Margin="8"
                 CornerRadius="8" Visibility="Collapsed" IsHitTestVisible="False">
-            <TextBlock Text="여기에 놓으면 첨부됩니다" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+            <TextBlock Text="여기에 놓으면 첨부됩니다" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource Accent}" FontWeight="SemiBold"/>
         </Border>
     </Grid>
 </Window>

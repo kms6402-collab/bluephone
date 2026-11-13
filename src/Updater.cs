@@ -22,6 +22,13 @@ namespace BluePhone
 
         public static Version Normalize(Version v) => new Version(v.Major, v.Minor, Math.Max(0, v.Build));
 
+        /// <summary>CHANGELOG 텍스트에서 특정 버전 단락 추출</summary>
+        public static string ExtractChanges(string text, string version)
+        {
+            var m = Regex.Match((text ?? "").Replace("\r\n", "\n"), @"(?ms)^##\s*\[?" + Regex.Escape(version) + @"\]?[^\n]*\n(.*?)(?=^##\s|\z)");
+            return m.Success ? m.Groups[1].Value.Trim() : null;
+        }
+
         /// <summary>내장된 CHANGELOG.md 에서 특정 버전의 변경 사항 추출</summary>
         public static string ChangesFor(string version)
         {
@@ -30,8 +37,7 @@ namespace BluePhone
                 using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("CHANGELOG.md");
                 if (s == null) return null;
                 var text = new StreamReader(s, Encoding.UTF8).ReadToEnd();
-                var m = Regex.Match(text, @"(?ms)^##\s*\[?" + Regex.Escape(version) + @"\]?[^\n]*\n(.*?)(?=^##\s|\z)");
-                return m.Success ? m.Groups[1].Value.Trim() : null;
+                return ExtractChanges(text, version);
             }
             catch { return null; }
         }
@@ -59,12 +65,25 @@ namespace BluePhone
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
         }
 
-        static WebClient Client()
+        static WebClient Client(bool api = false)
         {
             var wc = new WebClient { Encoding = Encoding.UTF8 };
-            wc.Headers[HttpRequestHeader.UserAgent] = "BluePhone-Updater";
-            wc.Headers[HttpRequestHeader.Accept] = "application/vnd.github+json";
+            wc.Headers[HttpRequestHeader.UserAgent] = "BluePhone-Updater/" + AppInfo.VersionText;
+            if (api) wc.Headers[HttpRequestHeader.Accept] = "application/vnd.github+json";
+            UseSystemProxy(wc);
             return wc;
+        }
+
+        /// <summary>회사 프록시: 윈도우 로그인 계정으로 프록시 인증 (인증이 필요한 프록시에서 403/407 방지)</summary>
+        static void UseSystemProxy(WebClient wc)
+        {
+            try
+            {
+                var proxy = WebRequest.GetSystemWebProxy();
+                proxy.Credentials = CredentialCache.DefaultCredentials;
+                wc.Proxy = proxy;
+            }
+            catch { }
         }
 
         /// <summary>이전 업데이트에서 남은 파일 정리</summary>
@@ -77,10 +96,65 @@ namespace BluePhone
             }
         }
 
+        /// <summary>
+        /// 최신 버전 확인.
+        /// 1) github.com/…/releases/latest 의 리디렉션 주소에서 버전 확인 — GitHub API 를 쓰지 않으므로
+        ///    회사처럼 여러 PC가 같은 공인 IP를 쓰는 곳에서도 'API 사용 한도 초과(403)'가 나지 않음
+        /// 2) 실패하면 GitHub API 로 한 번 더 시도
+        /// </summary>
         public static async Task<ReleaseInfo> CheckAsync()
         {
+            Exception first = null;
+            try { var r = await CheckViaRedirectAsync(); if (r != null) return r; }
+            catch (Exception ex) { first = ex; }
+            try { return await CheckViaApiAsync(); }
+            catch (Exception ex) { throw new Exception(Explain(first ?? ex), ex); }
+        }
+
+        static async Task<ReleaseInfo> CheckViaRedirectAsync()
+        {
+            var req = (HttpWebRequest)WebRequest.Create($"https://github.com/{AppInfo.Repo}/releases/latest");
+            req.Method = "HEAD";
+            req.AllowAutoRedirect = false;
+            req.UserAgent = "BluePhone-Updater/" + AppInfo.VersionText;
+            req.Timeout = 15000;
+            try { var proxy = WebRequest.GetSystemWebProxy(); proxy.Credentials = CredentialCache.DefaultCredentials; req.Proxy = proxy; } catch { }
+            string location;
+            using (var res = (HttpWebResponse)await req.GetResponseAsync())
+                location = res.Headers[HttpResponseHeader.Location];
+            // https://github.com/{repo}/releases/tag/v2.2.6
+            var m = Regex.Match(location ?? "", @"/releases/tag/([^/?#]+)");
+            if (!m.Success) return null;
+            var tag = Uri.UnescapeDataString(m.Groups[1].Value);
+            if (!Version.TryParse(tag.TrimStart('v', 'V'), out var v)) return null;
+            var baseUrl = $"https://github.com/{AppInfo.Repo}/releases/download/{tag}/";
+            var r = new ReleaseInfo
+            {
+                Version = AppInfo.Normalize(v),
+                Tag = tag,
+                AssetUrl = baseUrl + AssetName,
+                ShaUrl = baseUrl + AssetName + ".sha256",
+                PageUrl = $"https://github.com/{AppInfo.Repo}/releases/tag/{tag}",
+            };
+            // 변경 사항: 해당 버전의 CHANGELOG.md 에서 (raw 주소도 API 한도와 무관)
+            try
+            {
+                using (var wc = Client())
+                {
+                    var md = await wc.DownloadStringTaskAsync($"https://raw.githubusercontent.com/{AppInfo.Repo}/{tag}/CHANGELOG.md");
+                    var notes = AppInfo.ExtractChanges(md, r.VersionText);
+                    if (notes != null) r.Notes = notes;
+                }
+            }
+            catch { }
+            r.Notes = r.Notes ?? "";
+            return r;
+        }
+
+        static async Task<ReleaseInfo> CheckViaApiAsync()
+        {
             string json;
-            using (var wc = Client())
+            using (var wc = Client(api: true))
                 json = await wc.DownloadStringTaskAsync($"https://api.github.com/repos/{AppInfo.Repo}/releases/latest");
             var d = Store.Json.Deserialize<Dictionary<string, object>>(json);
             var tag = NetService.Str(d, "tag_name") ?? "";
@@ -99,6 +173,27 @@ namespace BluePhone
                 else if (name == AssetName + ".sha256") r.ShaUrl = NetService.Str(a, "browser_download_url");
             }
             return r.AssetUrl == null ? null : r;
+        }
+
+        /// <summary>네트워크 오류를 사용자에게 알기 쉬운 말로</summary>
+        public static string Explain(Exception ex)
+        {
+            if (ex is WebException we)
+            {
+                if (we.Response is HttpWebResponse res)
+                {
+                    int code = (int)res.StatusCode;
+                    if (code == 407) return "회사 프록시 인증이 필요합니다 (407). 전산 담당자에게 github.com 접속 허용을 요청하세요.";
+                    if (code == 403 || code == 429) return $"GitHub 접속이 거부되었습니다 ({code}). 회사 방화벽이 github.com 을 막고 있거나 잠시 사용량이 많은 경우입니다. 잠시 후 다시 시도하세요.";
+                    return $"업데이트 서버 응답 오류 ({code})";
+                }
+                if (we.Status == WebExceptionStatus.NameResolutionFailure || we.Status == WebExceptionStatus.ConnectFailure)
+                    return "인터넷 또는 github.com 에 연결할 수 없습니다.";
+                if (we.Status == WebExceptionStatus.Timeout) return "업데이트 서버 응답이 없습니다 (시간 초과).";
+                if (we.Status == WebExceptionStatus.TrustFailure || we.Status == WebExceptionStatus.SecureChannelFailure)
+                    return "보안 연결(TLS)에 실패했습니다. 회사 보안 프로그램이 HTTPS 를 검사하는 경우일 수 있습니다.";
+            }
+            return ex?.Message ?? "알 수 없는 오류";
         }
 
         public static bool IsNewer(ReleaseInfo r) => r != null && r.Version > AppInfo.Version;
