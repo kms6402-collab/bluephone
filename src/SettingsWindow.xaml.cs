@@ -194,7 +194,7 @@ namespace BluePhone
             {
                 if (Dialog.Confirm(null, "포트를 바꿨습니다", "새 포트는 프로그램을 다시 시작해야 적용됩니다. 지금 다시 시작할까요?", "다시 시작"))
                 {
-                    Process.Start(Native.ExePath, "--restart" + (Store.CustomDir ? $" --data \"{Store.Dir}\"" : ""));
+                    Process.Start(new ProcessStartInfo(Native.ExePath, "--restart" + (Store.CustomDir ? $" --data \"{Store.Dir}\"" : "")) { UseShellExecute = true });
                     _core.Quit();
                 }
             }

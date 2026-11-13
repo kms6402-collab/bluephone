@@ -160,7 +160,7 @@ namespace BluePhone
                 catch { File.Move(OldPath, cur); throw; }
                 ReadyPath = null;
                 var extra = Store.CustomDir ? $" --data \"{Store.Dir}\"" : "";
-                if (restart) Process.Start(new ProcessStartInfo(cur, "--restart --updated" + extra) { UseShellExecute = false });
+                if (restart) Process.Start(new ProcessStartInfo(cur, "--restart --updated" + extra) { UseShellExecute = true });
                 return true;
             }
             catch { return false; }

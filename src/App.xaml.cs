@@ -55,8 +55,19 @@ namespace BluePhone
 
             Updater.Cleanup();
             Core = new Core();
+            bool relaunched = e.Args.Any(a => a.Equals("--relaunched", StringComparison.OrdinalIgnoreCase));
+            // 이전 버전(2.1.0)이 소켓 핸들을 상속시킨 채 재시작한 경우: 셸로 한 번 더 띄워 상속 핸들을 끊는다
+            Core.RelaunchOnNetFail = () =>
+            {
+                if (!restart || relaunched) return false;
+                var args = string.Join(" ", e.Args.Select(a => a.Contains(" ") ? $"\"{a}\"" : a)) + " --relaunched";
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Native.ExePath, args) { UseShellExecute = true }); }
+                catch { return false; }
+                Dispatcher.BeginInvoke(new Action(Shutdown));
+                return true;
+            };
             bool tray = e.Args.Any(a => a.Equals("--tray", StringComparison.OrdinalIgnoreCase));
-            Core.Start(startHidden: tray || Core.Settings.StartHidden);
+            Core.Start(startHidden: tray || Core.Settings.StartHidden, retryNetwork: restart);
 
             var t = new Thread(() =>
             {
@@ -80,9 +91,10 @@ namespace BluePhone
         public AppSettings Settings { get; }
         public ObservableCollection<Peer> Peers { get; } = new ObservableCollection<Peer>();
         public ObservableCollection<ChatMessage> History { get; } = new ObservableCollection<ChatMessage>();
-        public NetService Net { get; } = new NetService();
+        public NetService Net { get; private set; } = new NetService();
 
         public event Action StatusChanged;
+        public Func<bool> RelaunchOnNetFail { get; set; }
         public event Action UnreadChanged;
 
         string _status;
@@ -116,10 +128,6 @@ namespace BluePhone
             foreach (var m in Enumerable.Reverse(hist)) History.Add(m);
             Store.RewriteHistory(hist); // 기록 파일 압축(중복 상태 줄 제거)
 
-            // 예전에 보낸 첨부파일도 계속 받아갈 수 있게 다시 등록
-            foreach (var m in hist.Where(x => x.Outgoing))
-                foreach (var f in m.Files)
-                    if (!string.IsNullOrEmpty(f.LocalPath) && File.Exists(f.LocalPath)) Net.Offer(f.Token, f.LocalPath);
 
             AvatarStore.Changed += id =>
             {
@@ -150,24 +158,37 @@ namespace BluePhone
 
         // ───────────────────────── lifecycle ─────────────────────────
 
-        public void Start(bool startHidden)
+        public void Start(bool startHidden, bool retryNetwork = false)
         {
             if (!Store.CustomDir) Native.SetAutoStart(Settings.AutoStart); // 파일명/위치가 바뀌어도 시작 프로그램 경로 갱신
 
+            // 수동 등록 PC + 현재 접속 중인 동료에게도 직접 알림 → 이름·사진 변경이 다른 대역에도 바로 전달 (ExtraTargets)
+
+            string netError = null;
+            for (int attempt = 0; ; attempt++)
+            {
+                try { Net.Start(Settings.Port); netError = null; break; }
+                catch (Exception ex)
+                {
+                    netError = ex.Message;
+                    Net.Dispose();
+                    Net = new NetService();
+                    if (!retryNetwork || attempt >= 15) break;
+                    Thread.Sleep(400);
+                }
+            }
             Net.HelloFactory = MakeHello;
-            // 수동 등록 PC + 현재 접속 중인 동료에게도 직접 알림 → 이름·사진 변경이 다른 대역에도 바로 전달
             Net.ExtraTargets = () => Settings.ManualHosts
                 .Concat(Peers.Where(x => x.IsOnline && !string.IsNullOrEmpty(x.Ip)).Select(x => $"{x.Ip}:{x.Port}"))
                 .ToList();
             Net.AvatarProvider = AvatarStore.MineBytes;
-            Net.HelloReceived += (p, ip) => UI.BeginInvoke(new Action(() => OnHello(p, ip)));
-            Net.ByeReceived += id => UI.BeginInvoke(new Action(() => OnBye(id)));
-            Net.MessageReceived += (p, ip) => UI.BeginInvoke(new Action(() => OnMessage(p, ip)));
-            Net.ReadReceived += (msg, from) => UI.BeginInvoke(new Action(() => OnRead(msg, from)));
+            HookNet();
+            if (netError != null && RelaunchOnNetFail != null && RelaunchOnNetFail()) return;
 
-            string netError = null;
-            try { Net.Start(Settings.Port); }
-            catch (Exception ex) { netError = ex.Message; }
+            // 예전에 보낸 첨부파일도 계속 받아갈 수 있게 다시 등록
+            foreach (var m in History.Where(x => x.Outgoing))
+                foreach (var f in m.Files)
+                    if (!string.IsNullOrEmpty(f.LocalPath) && File.Exists(f.LocalPath)) Net.Offer(f.Token, f.LocalPath);
 
             CreateTray();
             _main = new MainWindow(this);
@@ -210,11 +231,20 @@ namespace BluePhone
             UpdateTray();
         }
 
+        void HookNet()
+        {
+            Net.HelloReceived += (p, ip) => UI.BeginInvoke(new Action(() => OnHello(p, ip)));
+            Net.ByeReceived += id => UI.BeginInvoke(new Action(() => OnBye(id)));
+            Net.MessageReceived += (p, ip) => UI.BeginInvoke(new Action(() => OnMessage(p, ip)));
+            Net.ReadReceived += (msg, from) => UI.BeginInvoke(new Action(() => OnRead(msg, from)));
+        }
+
         public void Stop()
         {
             // 받아 둔 업데이트가 있으면 종료하면서 교체 (다음 실행부터 새 버전)
             if (Updater.ReadyPath != null) Updater.Apply(restart: false);
             try { Net.SayBye(Settings.Id); } catch { }
+            if (_main == null) { Net.Dispose(); return; }
             Settings.LastStatus = _autoAway ? Status.Online : _status;
             Store.SaveSettings(Settings);
             Store.SaveContacts(Peers);
