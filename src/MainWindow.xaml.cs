@@ -167,8 +167,32 @@ namespace BluePhone
             var add = new Button { Style = (Style)FindResource("Icon"), Content = "\uE710", FontSize = 11, Width = 26, Height = 26, Margin = new Thickness(0, 0, 0, 6), ToolTip = "새 그룹 만들기" };
             add.Click += (s, e) => NewGroup(SelectedPeers());
             GroupBar.Children.Add(add);
+            ApplyPeerGrouping();   // 그룹 이름이 바뀌거나 삭제돼도 제목 · 묶음을 맞춤
         }
         bool _favOnly;
+
+        /// <summary>
+        /// 전체 보기: 즐겨찾기 · 부서별 제목으로 묶음.
+        /// 그룹(또는 즐겨찾기)을 고르면: 부서 제목 없이 그 그룹 이름 하나로만 묶어 구성원만 보여 줌.
+        /// </summary>
+        void ApplyPeerGrouping()
+        {
+            string title = _groupFilter != null ? _groupFilter.Name : _favOnly ? "즐겨찾기" : null;
+            using (_peers.DeferRefresh())
+            {
+                _peers.GroupDescriptions.Clear();
+                if (title == null) _peers.GroupDescriptions.Add(new PropertyGroupDescription(nameof(Peer.Group)));
+                else _peers.GroupDescriptions.Add(new PropertyGroupDescription(null, new FixedGroup(title)));
+            }
+        }
+
+        sealed class FixedGroup : System.Windows.Data.IValueConverter
+        {
+            readonly string _name;
+            public FixedGroup(string name) { _name = name; }
+            public object Convert(object v, Type t, object p, System.Globalization.CultureInfo c) => _name;
+            public object ConvertBack(object v, Type t, object p, System.Globalization.CultureInfo c) => throw new NotSupportedException();
+        }
 
         PeerGroup NewGroup(IEnumerable<Peer> members)
         {
@@ -228,7 +252,14 @@ namespace BluePhone
             bool noPeers = _peers.IsEmpty;
             PeersEmpty.Visibility = noPeers ? Visibility.Visible : Visibility.Collapsed;
             bool searching = !string.IsNullOrWhiteSpace(Search.Text);
-            PeersEmptyTitle.Text = searching ? "검색 결과가 없습니다" : "같은 네트워크의 동료를 찾는 중";
+            bool inGroup = _groupFilter != null || _favOnly;
+            PeersEmptyTitle.Text = searching ? "검색 결과가 없습니다"
+                : _groupFilter != null ? $"'{_groupFilter.Name}' 그룹에 동료가 없습니다"
+                : _favOnly ? "즐겨찾기한 동료가 없습니다"
+                : "같은 네트워크의 동료를 찾는 중";
+            PeersEmptyBody.Text = inGroup
+                ? "그룹 버튼을 오른쪽 클릭 → 구성원 추가 · 빼기로 동료를 넣을 수 있습니다."
+                : "상대 PC에서도 파란전화기가 실행 중이어야 합니다. 다른 대역의 PC는 설정에서 IP를 직접 추가하세요.";
             PeersEmptyBody.Visibility = searching ? Visibility.Collapsed : Visibility.Visible;
             HistoryEmpty.Visibility = _history.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
         }
