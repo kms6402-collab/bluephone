@@ -22,6 +22,13 @@ namespace BluePhone
             Meta = meta, FileBg = "#14000000",
         };
 
+        static Theme Dark(string id, string name, string bg, string panel, string inBubble, string outBubble, string line, string input) => new Theme
+        {
+            Id = id, Name = name, Bg = bg, Panel = panel, Text = "#E8EAED", Sub = "#9AA0A6", Line = line,
+            In = inBubble, InText = "#E8EAED", Out = outBubble, OutText = "#FFFFFF", InputBg = input, InputLine = line,
+            Meta = "#7D838C", FileBg = "#22FFFFFF",
+        };
+
         public static readonly Theme[] Themes =
         {
             Light("light", "기본", "#FFFFFF", "#F1F3F6", "#1D5BF0"),
@@ -35,6 +42,20 @@ namespace BluePhone
             Light("mint", "민트", "#E7F5EF", "#FFFFFF", "#1E9A73", "#7C9A8E"),
             Light("lavender", "라벤더", "#F0EDFA", "#FFFFFF", "#7352D6", "#8D86A6"),
             Light("paper", "종이", "#F5F0E6", "#FFFFFF", "#6B5643", "#9C907E"),
+            Light("blossom", "벚꽃", "#FCEEF2", "#FFFFFF", "#D9487A", "#A88C96"),
+            Light("sunset", "노을", "#FDF0E6", "#FFFFFF", "#E2672E", "#A8907E"),
+            new Theme
+            {
+                Id = "lemon", Name = "레몬", Bg = "#FFF8D9", Panel = "#FFFFFF", Text = "#15181D", Sub = "#6B7280", Line = "#EDE6C8",
+                In = "#FFFFFF", InText = "#15181D", Out = "#FFD43B", OutText = "#2B2410", InputBg = "#FFFFFF", InputLine = "#E3DBB8",
+                Meta = "#A39A76", FileBg = "#14000000",
+            },
+            Light("ocean", "바다", "#E3F4F7", "#FFFFFF", "#0E8AA6", "#7A979E"),
+            Light("mono", "모노", "#F4F4F5", "#FFFFFF", "#27272A", "#9A9AA2"),
+            Dark("navy", "밤하늘", "#0F1626", "#151D30", "#222C44", "#4C7DF0", "#26304A", "#1B2439"),
+            Dark("forest", "숲", "#121A16", "#18221D", "#22302A", "#2E9B6F", "#2A3830", "#1E2A24"),
+            Dark("black", "블랙", "#000000", "#0B0B0C", "#1C1C1F", "#3A6CF4", "#222225", "#141416"),
+            Dark("grape", "포도", "#1A1424", "#211A2E", "#2E2540", "#8E63E8", "#33294A", "#261E36"),
         };
 
         public static Theme Find(string id) => Themes.FirstOrDefault(t => t.Id == id) ?? Themes[0];

@@ -228,7 +228,8 @@ namespace BluePhone
                 var sw = new Grid { Width = 16, Height = 16 };
                 sw.Children.Add(new System.Windows.Shapes.Ellipse { Fill = (Brush)new BrushConverter().ConvertFromString(t.Bg), Stroke = (Brush)FindResource("LineStrong"), StrokeThickness = 1 });
                 sw.Children.Add(new System.Windows.Shapes.Ellipse { Width = 8, Height = 8, Fill = (Brush)new BrushConverter().ConvertFromString(t.Out) });
-                var mi = new MenuItem { Header = t.Name, Icon = sw, IsChecked = (s.ChatTheme ?? "light") == t.Id };
+                bool on = (s.ChatTheme ?? "light") == t.Id;
+                var mi = new MenuItem { Header = on ? t.Name + "  ✓" : t.Name, Icon = sw, FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal };
                 mi.Click += (o, ev) => _core.SetChatLook(theme: tt.Id);
                 theme.Items.Add(mi);
             }

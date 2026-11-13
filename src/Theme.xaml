@@ -463,6 +463,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
+                    <Grid>
                     <Border x:Name="bd" Background="Transparent" CornerRadius="5" Padding="10,7">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -475,9 +476,31 @@
                                        VerticalAlignment="Center" Visibility="Collapsed"/>
                             <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="False"/>
                             <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}" Foreground="{StaticResource Faint}" Margin="16,0,0,0" FontSize="12"/>
+                            <TextBlock x:Name="arrow" Grid.Column="2" Text="&#xE76C;" FontFamily="{StaticResource Glyph}" FontSize="9" Foreground="{StaticResource Muted}"
+                                       VerticalAlignment="Center" Margin="16,0,0,0" Visibility="Collapsed"/>
                         </Grid>
                     </Border>
+                    <!-- 하위 메뉴 (테마 ›, 그룹에 추가 › 등) -->
+                    <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="-2" VerticalOffset="-5" AllowsTransparency="True" Focusable="False"
+                           PopupAnimation="Fade" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                        <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="4" Margin="0,0,8,8"
+                                TextElement.FontFamily="{StaticResource UI}" TextElement.FontSize="13">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.12" Direction="270"/>
+                            </Border.Effect>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False" MaxHeight="520">
+                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" MinWidth="150"/>
+                            </ScrollViewer>
+                        </Border>
+                    </Popup>
+                    </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter TargetName="arrow" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsSubmenuOpen" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource Hover}"/>
+                        </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource Hover}"/>
                         </Trigger>

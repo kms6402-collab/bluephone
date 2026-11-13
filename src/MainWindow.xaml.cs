@@ -118,9 +118,39 @@ namespace BluePhone
                         if (Dialog.Confirm(this, "그룹 삭제", $"'{g.Name}' 그룹을 삭제할까요? 동료 목록에는 영향이 없습니다.", "삭제", danger: true))
                         { _core.Settings.Groups.Remove(g); _core.SaveGroups(); }
                     };
-                    cm.Items.Add(send); cm.Items.Add(ren); cm.Items.Add(new Separator()); cm.Items.Add(del);
+                    // 구성원 추가 · 빼기: 동료를 하나씩 체크 (메뉴가 닫히지 않아 여러 명을 연달아 고를 수 있음)
+                    var members = new MenuItem { Header = "구성원 추가 · 빼기" };
+                    members.Items.Add(new MenuItem { Header = "(불러오는 중)" });
+                    members.SubmenuOpened += (s, e) =>
+                    {
+                        if (e.OriginalSource != members) return;
+                        members.Items.Clear();
+                        var peers = _core.Peers.OrderByDescending(x => g.Members.Contains(x.Id)).ThenBy(x => x.DisplayName).ToList();
+                        if (peers.Count == 0) members.Items.Add(new MenuItem { Header = "동료가 없습니다", IsEnabled = false });
+                        foreach (var p in peers)
+                        {
+                            var pp = p;
+                            var mi = new MenuItem
+                            {
+                                Header = string.IsNullOrEmpty(p.Dept) ? p.DisplayName : $"{p.DisplayName}  · {p.Dept}",
+                                IsChecked = g.Members.Contains(p.Id), StaysOpenOnClick = true,
+                            };
+                            mi.Click += (o, ev) =>
+                            {
+                                if (g.Members.Contains(pp.Id)) g.Members.Remove(pp.Id); else g.Members.Add(pp.Id);
+                                mi.IsChecked = g.Members.Contains(pp.Id);
+                                Store.SaveSettings(_core.Settings);
+                                _peers.Refresh();
+                                RefreshCounts();
+                            };
+                            members.Items.Add(mi);
+                        }
+                    };
+                    // 메뉴를 닫을 때 그룹 표시(인원수 등)를 새로 그림
+                    cm.Closed += (s, e) => _core.SaveGroups();
+                    cm.Items.Add(send); cm.Items.Add(members); cm.Items.Add(ren); cm.Items.Add(new Separator()); cm.Items.Add(del);
                     b.ContextMenu = cm;
-                    b.ToolTip = $"{_core.GroupMembers(g).Count}명 · 오른쪽 클릭으로 편집";
+                    b.ToolTip = $"{_core.GroupMembers(g).Count}명 · 오른쪽 클릭으로 구성원 추가 · 편집";
                 }
                 GroupBar.Children.Add(b);
                 return b;
@@ -142,7 +172,7 @@ namespace BluePhone
 
         PeerGroup NewGroup(IEnumerable<Peer> members)
         {
-            var name = Dialog.Prompt(this, "새 그룹", "그룹 이름을 입력하세요. (예: 개발팀, 점심 멤버) 동료 목록에서 오른쪽 클릭 → 그룹에 추가로 넣을 수 있습니다.", "", "만들기");
+            var name = Dialog.Prompt(this, "새 그룹", "그룹 이름을 입력하세요. (예: 개발팀, 점심 멤버)\n구성원은 그룹 버튼을 오른쪽 클릭 → 구성원 추가 · 빼기, 또는 동료를 오른쪽 클릭 → 그룹에 추가로 넣을 수 있습니다.", "", "만들기");
             if (string.IsNullOrWhiteSpace(name)) return null;
             var g = new PeerGroup { Name = name.Trim() };
             foreach (var p in members ?? new Peer[0]) g.Members.Add(p.Id);
