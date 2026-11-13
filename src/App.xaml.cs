@@ -665,6 +665,7 @@ namespace BluePhone
             var from = NetService.Str(p, "from");
             if (string.IsNullOrEmpty(from)) return;
             var id = NetService.Str(p, "id");
+            if (IsBlocked(from)) return;   // 차단한 동료의 쪽지 · 대화는 받지 않음
             if (History.Any(x => !x.Outgoing && x.Id == id)) return; // 중복 수신 방지
 
             var peer = FindOrAdd(from);
@@ -701,6 +702,7 @@ namespace BluePhone
             };
             History.Insert(0, m);
             Store.AppendHistory(m);
+            AutoFetchImages(m);
             peer.HasUnread = true;
             UnreadChanged?.Invoke();
             UpdateTray();
@@ -866,7 +868,44 @@ namespace BluePhone
         }
 
         public IList<Peer> GroupMembers(PeerGroup g) =>
-            g.Members.Select(id => Peers.FirstOrDefault(x => x.Id == id)).Where(x => x != null).ToList();
+            g.Members.Select(id => Peers.FirstOrDefault(x => x.Id == id)).Where(x => x != null && !IsBlocked(x.Id)).ToList();
+
+        // ───────────────────────── block ─────────────────────────
+
+        public bool IsBlocked(string peerId) => peerId != null && Settings.Blocked.Any(b => b.Id == peerId);
+        public event Action BlockedChanged;
+
+        public void Block(Peer p)
+        {
+            if (p == null || IsBlocked(p.Id)) return;
+            Settings.Blocked.Add(new BlockedPeer { Id = p.Id, Name = p.DisplayName });
+            Store.SaveSettings(Settings);
+            if (_chats.TryGetValue(p.Id, out var w)) w.Close();
+            foreach (var pw in _popups.Where(x => x.Message.PeerId == p.Id).ToList()) pw.Close();
+            BlockedChanged?.Invoke();
+        }
+
+        public void Unblock(string peerId)
+        {
+            Settings.Blocked.RemoveAll(b => b.Id == peerId);
+            Store.SaveSettings(Settings);
+            BlockedChanged?.Invoke();
+        }
+
+        /// <summary>받은 이미지는 바로 보이도록 자동으로 받아 둠 (20MB 이하)</summary>
+        async void AutoFetchImages(ChatMessage m)
+        {
+            if (!Settings.AutoImage) return;
+            foreach (var f in m.Files.Where(x => Media.IsImage(x.Name) && x.Size > 0 && x.Size <= 20L * 1024 * 1024 && string.IsNullOrEmpty(x.LocalPath)).ToList())
+            {
+                try
+                {
+                    var dest = Store.UniquePath(Store.DownloadDir(Settings), f.Name);
+                    await DownloadFile(m, f, dest);
+                }
+                catch { }
+            }
+        }
 
         // ───────────────────────── capture ─────────────────────────
 

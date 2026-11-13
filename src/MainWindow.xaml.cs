@@ -73,6 +73,7 @@ namespace BluePhone
             };
 
             core.GroupsChanged += BuildGroupBar;
+            core.BlockedChanged += () => { _peers.Refresh(); RefreshCounts(); QueueConversations(); };
             core.PeerRenamed += _ => QueueConversations();
             AvatarStore.Changed += _ => Dispatcher.BeginInvoke(new Action(QueueConversations));
             BuildGroupBar();
@@ -125,7 +126,7 @@ namespace BluePhone
                     {
                         if (e.OriginalSource != members) return;
                         members.Items.Clear();
-                        var peers = _core.Peers.OrderByDescending(x => g.Members.Contains(x.Id)).ThenBy(x => x.DisplayName).ToList();
+                        var peers = _core.Peers.Where(x => !_core.IsBlocked(x.Id)).OrderByDescending(x => g.Members.Contains(x.Id)).ThenBy(x => x.DisplayName).ToList();
                         if (peers.Count == 0) members.Items.Add(new MenuItem { Header = "동료가 없습니다", IsEnabled = false });
                         foreach (var p in peers)
                         {
@@ -181,8 +182,48 @@ namespace BluePhone
             using (_peers.DeferRefresh())
             {
                 _peers.GroupDescriptions.Clear();
-                if (title == null) _peers.GroupDescriptions.Add(new PropertyGroupDescription(nameof(Peer.Group)));
+                if (title == null) _peers.GroupDescriptions.Add(new PropertyGroupDescription(null, new SectionNames(_core)) { CustomSort = new SectionOrder(_core) });
                 else _peers.GroupDescriptions.Add(new PropertyGroupDescription(null, new FixedGroup(title)));
+            }
+        }
+
+        /// <summary>
+        /// 전체 보기의 묶음: 즐겨찾기 → 내가 만든 그룹(만든 순서) → 부서별 → 부서 미지정.
+        /// 그룹에 넣은 동료는 부서 대신 그 그룹 아래에 보임 (여러 그룹이면 각 그룹에 모두)
+        /// </summary>
+        sealed class SectionNames : System.Windows.Data.IValueConverter
+        {
+            readonly Core _core;
+            public SectionNames(Core core) { _core = core; }
+            public object Convert(object v, Type t, object p, System.Globalization.CultureInfo c)
+            {
+                if (!(v is Peer peer)) return "";
+                var names = new List<string>();
+                if (peer.Favorite) names.Add("즐겨찾기");
+                foreach (var g in _core.Settings.Groups) if (g.Members.Contains(peer.Id) && !names.Contains(g.Name)) names.Add(g.Name);
+                if (names.Count == 0) return peer.Group;
+                return names.Count == 1 ? (object)names[0] : names;
+            }
+            public object ConvertBack(object v, Type t, object p, System.Globalization.CultureInfo c) => throw new NotSupportedException();
+        }
+
+        sealed class SectionOrder : System.Collections.IComparer
+        {
+            readonly Core _core;
+            public SectionOrder(Core core) { _core = core; }
+            int Rank(string name)
+            {
+                if (name == "즐겨찾기") return 0;
+                int i = _core.Settings.Groups.FindIndex(g => g.Name == name);
+                if (i >= 0) return 1 + i;
+                return name == "부서 미지정" ? 100000 : 10000;
+            }
+            public int Compare(object x, object y)
+            {
+                var a = (x as CollectionViewGroup)?.Name?.ToString() ?? "";
+                var b = (y as CollectionViewGroup)?.Name?.ToString() ?? "";
+                int r = Rank(a).CompareTo(Rank(b));
+                return r != 0 ? r : string.Compare(a, b, StringComparison.CurrentCulture);
             }
         }
 
@@ -207,6 +248,7 @@ namespace BluePhone
 
         bool PeerFilter(Peer p)
         {
+            if (_core.IsBlocked(p.Id)) return false;   // 차단한 동료는 목록에서 숨김
             if (_hideOffline && !p.IsOnline) return false;
             if (_favOnly && !p.Favorite) return false;
             if (_groupFilter != null && !_groupFilter.Members.Contains(p.Id)) return false;
@@ -239,7 +281,7 @@ namespace BluePhone
 
         void RefreshCounts()
         {
-            int online = _core.Peers.Count(p => p.IsOnline);
+            int online = _core.Peers.Count(p => p.IsOnline && !_core.IsBlocked(p.Id));
             PeerCount.Text = online.ToString();
             int unread = _core.History.Count(m => !m.Outgoing && !m.Read && !m.Chat);
             UnreadBadge.Visibility = unread > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -313,6 +355,21 @@ namespace BluePhone
             Add("동료 다시 찾기", () => _core.Rescan());
             Add("받은 파일 폴더 열기", () => _core.OpenDownloads());
             Add("모두 읽음 처리", _core.MarkAllRead);
+            var blocked = _core.Settings.Blocked;
+            var bm = new MenuItem { Header = blocked.Count > 0 ? $"차단한 동료 ({blocked.Count})" : "차단한 동료" };
+            if (blocked.Count == 0) bm.Items.Add(new MenuItem { Header = "차단한 동료가 없습니다", IsEnabled = false });
+            foreach (var b in blocked.ToList())
+            {
+                var bb = b;
+                var mi = new MenuItem { Header = $"{b.Name}  — 차단 해제" };
+                mi.Click += (o, ev) =>
+                {
+                    if (Dialog.Confirm(this, "차단 해제", $"{bb.Name}님의 차단을 해제할까요? 다시 목록에 보이고 쪽지 · 대화를 받습니다.", "해제"))
+                        _core.Unblock(bb.Id);
+                };
+                bm.Items.Add(mi);
+            }
+            m.Items.Add(bm);
             Add("오프라인 동료 숨기기", () => { _hideOffline = !_hideOffline; _peers.Refresh(); RefreshCounts(); }, _hideOffline);
             m.Items.Add(new Separator());
             Add("설정", () => _core.ShowSettings(this));
@@ -425,6 +482,8 @@ namespace BluePhone
             PmGroup.Items.Add(create);
             PmSend.Header = sel.Length > 1 ? $"{sel.Length}명에게 쪽지 보내기" : "쪽지 보내기";
             PmCopy.IsEnabled = sel.Length == 1;
+            PmBlock.IsEnabled = sel.Length > 0;
+            PmBlock.Header = sel.Length > 1 ? $"{sel.Length}명 차단…" : "차단…";
             PmAlias.IsEnabled = sel.Length == 1;
             PmAlias.Header = sel.Length == 1 && !string.IsNullOrEmpty(sel[0].Alias) ? "별명 바꾸기…" : "별명 지정…";
             PmRemove.IsEnabled = sel.Length > 0 && sel.All(p => !p.IsOnline);
@@ -439,6 +498,15 @@ namespace BluePhone
             foreach (var p in sel) if (p.Favorite != on) _core.ToggleFavorite(p);
             BuildGroupBar();
         }
+        void PmBlock_Click(object sender, RoutedEventArgs e)
+        {
+            var sel = SelectedPeers();
+            if (sel.Length == 0) return;
+            var names = string.Join(", ", sel.Select(p => p.DisplayName).Take(3)) + (sel.Length > 3 ? $" 외 {sel.Length - 3}명" : "");
+            if (!Dialog.Confirm(this, "차단", $"{names}님을 차단할까요?\n목록에서 보이지 않고, 보내는 쪽지 · 대화를 받지 않습니다.\n위쪽 ⋯ 메뉴 › 차단한 동료에서 언제든 해제할 수 있습니다.", "차단", danger: true)) return;
+            foreach (var p in sel) _core.Block(p);
+        }
+
         void PmAlias_Click(object sender, RoutedEventArgs e)
         {
             var p = SelectedPeers().FirstOrDefault();
@@ -483,7 +551,7 @@ namespace BluePhone
 
         void Broadcast_Click(object sender, RoutedEventArgs e)
         {
-            var online = _core.Peers.Where(p => p.IsOnline).ToArray();
+            var online = _core.Peers.Where(p => p.IsOnline && !_core.IsBlocked(p.Id)).ToArray();
             if (online.Length == 0)
             {
                 Dialog.Alert(this, "접속 중인 동료가 없습니다", "전체 공지는 지금 접속해 있는 동료에게만 전달됩니다.");
@@ -562,7 +630,7 @@ namespace BluePhone
             var q = Search?.Text?.Trim();
             var list = _core.History.Where(m => m.Chat && !m.Broadcast)
                 .Select(m => new { m, id = m.Outgoing ? (m.ToIds.Count == 1 ? m.ToIds[0] : null) : m.PeerId })
-                .Where(x => x.id != null)
+                .Where(x => x.id != null && !_core.IsBlocked(x.id))
                 .GroupBy(x => x.id)
                 .Select(g =>
                 {

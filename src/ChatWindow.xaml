@@ -8,6 +8,10 @@
 
         <DataTemplate x:Key="FileTpl" DataType="{x:Type local:FileItem}">
             <Border x:Name="fb" Background="{DynamicResource Ct.FileBg}" CornerRadius="8" Padding="10,7,6,7" Margin="0,6,0,0" MinWidth="200">
+                <StackPanel>
+                <Image local:Media.Path="{Binding PreviewPath}" MaxWidth="260" MaxHeight="260" HorizontalAlignment="Left" Margin="-4,-1,0,7"
+                       Stretch="Uniform" StretchDirection="DownOnly" Cursor="Hand" Tag="{Binding}" MouseLeftButtonDown="Thumb_Click" ToolTip="누르면 크게 봅니다"
+                       RenderOptions.BitmapScalingMode="HighQuality" Visibility="{Binding PreviewPath, Converter={StaticResource Vis}}"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -23,6 +27,10 @@
                                      Background="#22000000" Foreground="{DynamicResource Accent}" Visibility="Collapsed"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                        <Button Style="{StaticResource Outline}" Height="26" Width="28" Padding="0" Margin="0,0,4,0" Tag="{Binding}" Click="Preview_Click"
+                                ToolTip="미리 보기" Visibility="{Binding CanPreviewNow, Converter={StaticResource Vis}}">
+                            <TextBlock Text="&#xE7B3;" FontFamily="{StaticResource Glyph}" FontSize="12" Foreground="{DynamicResource Ink2}"/>
+                        </Button>
                         <Button x:Name="act" Style="{StaticResource Outline}" Height="26" Padding="9,0" Content="받기" Tag="{Binding}" Click="FileAction_Click"/>
                         <Button x:Name="folder" Style="{StaticResource Outline}" Height="26" Width="28" Padding="0" Margin="4,0,0,0" Tag="{Binding}"
                                 Click="FileFolder_Click" Visibility="Collapsed" ToolTip="폴더에서 보기">
@@ -30,6 +38,7 @@
                         </Button>
                     </StackPanel>
                 </Grid>
+                </StackPanel>
             </Border>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding State}" Value="받는 중">
@@ -89,6 +98,8 @@
                             <TextBlock x:Name="txt" local:Emoji.Text="{Binding Text}" TextWrapping="Wrap"
                                        FontSize="{DynamicResource Ct.Size}" FontFamily="{DynamicResource Ct.Font}"
                                        Visibility="{Binding Text, Converter={StaticResource Vis}}"/>
+                            <ContentControl x:Name="md" Visibility="Collapsed" Focusable="False" IsTabStop="False"
+                                            FontSize="{DynamicResource Ct.Size}" FontFamily="{DynamicResource Ct.Font}"/>
                             <ItemsControl ItemsSource="{Binding Files}" ItemTemplate="{StaticResource FileTpl}" Focusable="False"/>
                         </StackPanel>
                     </Border>
@@ -109,6 +120,12 @@
                     <Setter TargetName="bubble" Property="TextElement.Foreground" Value="{DynamicResource Ct.OutText}"/>
                     <Setter TargetName="metaRow" Property="HorizontalAlignment" Value="Right"/>
                     <Setter TargetName="tags" Property="HorizontalAlignment" Value="Right"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasMarkup}" Value="True">
+                    <Setter TargetName="txt" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="md" Property="Visibility" Value="Visible"/>
+                    <Setter TargetName="md" Property="local:Markdown.Text" Value="{Binding Text}"/>
+                    <Setter TargetName="bubble" Property="MaxWidth" Value="340"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsPending}" Value="True">
                     <Setter TargetName="bubble" Property="Opacity" Value="0.6"/>
@@ -196,8 +213,10 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border BorderBrush="{DynamicResource Ct.InputLine}" BorderThickness="1" CornerRadius="6" Height="28" Padding="8,0,2,0" Margin="0,0,6,6">
+                            <Border BorderBrush="{DynamicResource Ct.InputLine}" BorderThickness="1" CornerRadius="6" MinHeight="28" Padding="8,0,2,0" Margin="0,0,6,6">
                                 <StackPanel Orientation="Horizontal">
+                                    <Image local:Media.Path="{Binding Thumb}" MaxHeight="72" MaxWidth="128" Margin="0,4,8,4" Cursor="Hand" Tag="{Binding Thumb}"
+                                           MouseLeftButtonDown="ThumbPath_Click" ToolTip="누르면 크게 봅니다" Visibility="{Binding Thumb, Converter={StaticResource Vis}}"/>
                                     <TextBlock Text="{Binding Name}" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding SizeText}" Style="{StaticResource Caption}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                     <Button Style="{StaticResource Icon}" Width="22" Height="22" FontSize="8" Content="&#xE8BB;" Tag="{Binding}" Click="RemoveFile_Click" Margin="2,0,0,0"/>
@@ -218,6 +237,8 @@
                          VerticalContentAlignment="Top" Padding="10,9" VerticalScrollBarVisibility="Auto" PreviewKeyDown="Input_PreviewKeyDown"/>
                 <DockPanel Margin="0,8,0,0">
                     <Button DockPanel.Dock="Left" x:Name="EmojiBtn" Style="{StaticResource Icon}" Content="&#xE76E;" FontSize="15" ToolTip="이모지 · 이모티콘" Click="Emoji_Click" Foreground="{DynamicResource Ct.Sub}"/>
+                    <Button DockPanel.Dock="Left" x:Name="FormatBtn" Style="{StaticResource Icon}" Content="&#xE8D2;" FontSize="15" ToolTip="서식 (마크다운) — 굵게 Ctrl+B · 기울임 Ctrl+I · 목록 · 인용 · 링크" Click="Format_Click" Foreground="{DynamicResource Ct.Sub}"/>
+                    <Button DockPanel.Dock="Left" x:Name="CodeBtn" Style="{StaticResource Icon}" Content="&#xE943;" FontSize="15" ToolTip="코드 블록 넣기 (Ctrl+Shift+C)" Click="Code_Click" Foreground="{DynamicResource Ct.Sub}"/>
                     <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE723;" FontSize="15" ToolTip="파일 · 폴더 첨부" Click="Attach_Click" Foreground="{DynamicResource Ct.Sub}"/>
                     <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE8C6;" FontSize="15" ToolTip="화면 캡처 (Ctrl+Alt+S)" Click="Capture_Click" x:Name="CaptureBtn" Foreground="{DynamicResource Ct.Sub}"/>
                     <Button DockPanel.Dock="Left" x:Name="ScheduleBtn" Style="{StaticResource Icon}" Content="&#xE823;" FontSize="15" ToolTip="예약 보내기" Click="Schedule_Click" Foreground="{DynamicResource Ct.Sub}"/>

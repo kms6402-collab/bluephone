@@ -217,6 +217,7 @@
                         <MenuItem x:Name="PmGroup" Header="그룹에 추가"/>
                         <MenuItem x:Name="PmAlias" Header="별명 지정…" Click="PmAlias_Click"/>
                         <MenuItem x:Name="PmCopy" Header="IP 주소 복사" Click="PmCopy_Click"/>
+                        <MenuItem x:Name="PmBlock" Header="차단…" Click="PmBlock_Click"/>
                         <Separator/>
                         <MenuItem x:Name="PmRemove" Header="목록에서 삭제" Click="PmRemove_Click"/>
                     </ContextMenu>

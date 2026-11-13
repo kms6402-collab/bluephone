@@ -127,9 +127,18 @@ namespace BluePhone
         public string Name { get; set; }
         public long Size { get; set; }
         public string Token { get; set; }
-        public string LocalPath { get; set; }
+        string _local;
+        public string LocalPath
+        {
+            get => _local;
+            set { if (Set(ref _local, value)) { Raise(nameof(PreviewPath)); Raise(nameof(CanPreviewNow)); } }
+        }
 
         [ScriptIgnore] public string SizeText => FormatSize(Size);
+        /// <summary>바로 보기 이미지 (이미지 파일이 내 PC에 있을 때)</summary>
+        [ScriptIgnore] public string PreviewPath => Media.IsImage(Name) && Media.Exists(LocalPath) ? LocalPath : null;
+        /// <summary>미리 보기 창으로 볼 수 있는지 (이미지 · 텍스트 · 동영상, 내 PC에 있을 때)</summary>
+        [ScriptIgnore] public bool CanPreviewNow => Media.CanPreview(Name) && Media.Exists(LocalPath);
         [ScriptIgnore] public string State { get => _state; set => Set(ref _state, value); }
         [ScriptIgnore] public double Progress { get => _progress; set => Set(ref _progress, value); }
 
@@ -180,13 +189,15 @@ namespace BluePhone
         public bool Failed { get => _failed; set { if (Set(ref _failed, value)) Raise(nameof(Meta)); } }
 
         [ScriptIgnore] public DateTime Time => DateTimeOffset.FromUnixTimeMilliseconds(Ts).LocalDateTime;
+        /// <summary>마크다운 서식이 있는 메시지</summary>
+        [ScriptIgnore] public bool HasMarkup => Markdown.HasMarkup(Text);
         [ScriptIgnore] public string TimeText => Time.Date == DateTime.Today ? Time.ToString("tt h:mm") : Time.ToString("M월 d일");
         [ScriptIgnore] public string FullTime => Time.ToString("yyyy. M. d. (ddd) tt h:mm");
         [ScriptIgnore] public string Preview
         {
             get
             {
-                var t = (Text ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+                var t = (Markdown.Plain(Text) ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
                 if (t.Length == 0 && Files.Count > 0) t = "파일 " + Files.Count + "개";
                 return t;
             }
@@ -268,6 +279,10 @@ namespace BluePhone
         public string ChatTheme { get; set; } = "light";
         public string ChatFont { get; set; } = "";
         public double ChatFontSize { get; set; } = 13.5;
+        /// <summary>차단한 동료 — 목록에서 숨기고 쪽지 · 대화를 받지 않음</summary>
+        public List<BlockedPeer> Blocked { get; set; } = new List<BlockedPeer>();
+        /// <summary>받은 이미지(20MB 이하)를 자동으로 받아 바로 보기</summary>
+        public bool AutoImage { get; set; } = true;
         /// <summary>알림 개인정보 보호: 0 = 보낸 사람·내용 모두 표시, 1 = 보낸 사람만, 2 = 모두 숨기기</summary>
         public int AlertPrivacy { get; set; } = 1;
         public bool StartHidden { get; set; } = false;
@@ -319,5 +334,11 @@ namespace BluePhone
         public string TimeText => Last?.TimeText ?? "";
         public bool HasUnread => Unread > 0;
         public string UnreadText => Unread > 99 ? "99+" : Unread.ToString();
+    }
+
+    public sealed class BlockedPeer
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
     }
 }

@@ -137,6 +137,7 @@ namespace BluePhone
 
         void Input_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (Markdown.HandleKey(Input, e, this)) { e.Handled = true; return; }
             if (e.Key == Key.Enter)
             {
                 bool send = _core.Settings.EnterToSend ? Keyboard.Modifiers == ModifierKeys.None : Keyboard.Modifiers == ModifierKeys.Control;
@@ -215,6 +216,22 @@ namespace BluePhone
         void Capture_Click(object sender, RoutedEventArgs e) => _core.StartCapture(this);
 
         void Emoji_Click(object sender, RoutedEventArgs e) => Emoji.ShowPicker(EmojiBtn, Input);
+        void Format_Click(object sender, RoutedEventArgs e) => Markdown.ShowFormatMenu(FormatBtn, Input, this, _look);
+        void Code_Click(object sender, RoutedEventArgs e) => Markdown.InsertCode(Input, this);
+
+        // 바로 보기 이미지 · 미리 보기
+        void Thumb_Click(object sender, MouseButtonEventArgs e)
+        {
+            { e.Handled = true; if ((sender as FrameworkElement)?.Tag is FileItem f) Media.OpenPreview(f.LocalPath, this); }
+        }
+        void ThumbPath_Click(object sender, MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is string path) Media.OpenPreview(path, this);
+        }
+        void Preview_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is FileItem f) Media.OpenPreview(f.LocalPath, this);
+        }
 
         // ───────────── 꾸미기 ─────────────
 

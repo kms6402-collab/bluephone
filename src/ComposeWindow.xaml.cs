@@ -20,6 +20,8 @@ namespace BluePhone
             public string Name => System.IO.Path.GetFileName(Path);
             public string SizeText { get; set; }
             public string Kind { get; set; }
+            /// <summary>이미지면 미리 보기 (붙여 넣은 스크린샷 등)</summary>
+            public string Thumb => Media.IsImage(Path) ? Path : null;
         }
 
         readonly Core _core;
@@ -89,6 +91,12 @@ namespace BluePhone
         void Capture_Click(object sender, RoutedEventArgs e) => _core.StartCapture(this);
 
         void Emoji_Click(object sender, RoutedEventArgs e) => Emoji.ShowPicker(EmojiBtn, Body);
+        void Format_Click(object sender, RoutedEventArgs e) => Markdown.ShowFormatMenu(FormatBtn, Body, this);
+        void Code_Click(object sender, RoutedEventArgs e) => Markdown.InsertCode(Body, this);
+        void Thumb_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is string path) Media.OpenPreview(path, this);
+        }
 
         void Schedule_Click(object sender, RoutedEventArgs e)
         {
@@ -151,7 +159,7 @@ namespace BluePhone
 
         void AddTo_Click(object sender, RoutedEventArgs e)
         {
-            var candidates = _core.Peers.Where(p => !_to.Contains(p))
+            var candidates = _core.Peers.Where(p => !_to.Contains(p) && !_core.IsBlocked(p.Id))
                 .OrderBy(p => p.SortKey).ThenBy(p => p.Group).ThenBy(p => p.DisplayName).ToList();
             var m = new ContextMenu { PlacementTarget = AddBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, MaxHeight = 360 };
             if (candidates.Count == 0)
@@ -265,6 +273,7 @@ namespace BluePhone
 
         void Body_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (Markdown.HandleKey(Body, e, this)) { e.Handled = true; return; }
             if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control)
             {
                 e.Handled = true;

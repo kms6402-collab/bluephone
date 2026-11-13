@@ -4,6 +4,9 @@
         xmlns:local="clr-namespace:BluePhone"
         Title="새 쪽지" Width="460" Height="440" MinWidth="360" MinHeight="300" AllowDrop="True"
         WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <local:BoolToVis x:Key="Vis"/>
+    </Window.Resources>
     <Grid x:Name="Root">
         <Grid.RowDefinitions>
             <RowDefinition Height="40"/>
@@ -80,9 +83,11 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <Border BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Height="30" Padding="8,0,2,0" Margin="0,0,6,6"
+                    <Border BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" MinHeight="30" Padding="8,0,2,0" Margin="0,0,6,6"
                             ToolTip="{Binding Path}">
                         <StackPanel Orientation="Horizontal">
+                            <Image local:Media.Path="{Binding Thumb}" MaxHeight="72" MaxWidth="128" Margin="0,4,8,4" Cursor="Hand" Tag="{Binding Thumb}"
+                                   MouseLeftButtonDown="Thumb_Click" ToolTip="누르면 크게 봅니다" Visibility="{Binding Thumb, Converter={StaticResource Vis}}"/>
                             <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource Glyph}" FontSize="12" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding Name}" MaxWidth="180" TextTrimming="CharacterEllipsis" Margin="6,0,6,0" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding SizeText}" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
@@ -108,6 +113,8 @@
                 <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE723;" FontSize="15" ToolTip="파일 첨부 — 모든 형식 · 폴더는 자동 압축 (끌어다 놓기, Ctrl+V 도 가능)" Click="Attach_Click"/>
                 <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE8C6;" FontSize="15" ToolTip="화면 캡처해서 첨부 (Ctrl+Alt+S)" Click="Capture_Click"/>
                 <Button DockPanel.Dock="Left" x:Name="EmojiBtn" Style="{StaticResource Icon}" Content="&#xE76E;" FontSize="15" ToolTip="이모지 · 이모티콘" Click="Emoji_Click"/>
+                <Button DockPanel.Dock="Left" x:Name="FormatBtn" Style="{StaticResource Icon}" Content="&#xE8D2;" FontSize="15" ToolTip="서식 (마크다운) — 굵게 Ctrl+B · 기울임 Ctrl+I · 목록 · 인용 · 링크" Click="Format_Click"/>
+                <Button DockPanel.Dock="Left" x:Name="CodeBtn" Style="{StaticResource Icon}" Content="&#xE943;" FontSize="15" ToolTip="코드 블록 넣기 (Ctrl+Shift+C)" Click="Code_Click"/>
                 <Button DockPanel.Dock="Left" x:Name="ScheduleBtn" Style="{StaticResource Icon}" Content="&#xE823;" FontSize="15" ToolTip="예약 보내기" Click="Schedule_Click"/>
                 <ToggleButton x:Name="Urgent" DockPanel.Dock="Left" Style="{StaticResource Chip}" Margin="6,0,0,0" VerticalAlignment="Center"
                               ToolTip="받는 사람이 방해 금지 상태여도 알림이 뜨고, 창이 깜박입니다">

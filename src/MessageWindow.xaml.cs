@@ -53,6 +53,8 @@ namespace BluePhone
 
             Avatar.Fill = m.AvatarBrush;
             Body.Text = m.Text;
+            _md = Markdown.HasMarkup(m.Text);
+            if (_md) { MdBody.Content = Markdown.Render(m.Text); SetBody(Visibility.Visible); }
             RefreshHeader();
             core.PeerRenamed += OnPeerRenamed;
             Closed += (s, e) => core.PeerRenamed -= OnPeerRenamed;
@@ -82,7 +84,7 @@ namespace BluePhone
 
             FileList.ItemsSource = m.Files;
             FileList.Visibility = m.Files.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-            if (m.Files.Count > 0 && string.IsNullOrWhiteSpace(m.Text)) Body.Visibility = Visibility.Collapsed;
+            if (m.Files.Count > 0 && string.IsNullOrWhiteSpace(m.Text)) SetBody(Visibility.Collapsed);
 
             Activated += (s, e) => MarkRead();
             PreviewMouseDown += (s, e) =>
@@ -224,7 +226,7 @@ namespace BluePhone
                 _privacy = Message.Outgoing ? 0 : Math.Max(0, Math.Min(2, value));
                 if (_privacy == 0) return;
                 _veiled = true;
-                Body.Visibility = Visibility.Collapsed;
+                SetBody(Visibility.Collapsed);
                 FileList.Visibility = Visibility.Collapsed;
                 Veil.Visibility = Visibility.Visible;
                 var kind = Message.Chat ? "메시지" : "쪽지";
@@ -258,7 +260,7 @@ namespace BluePhone
             Veil.Visibility = Visibility.Collapsed;
             var m = Message;
             FileList.Visibility = m.Files.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-            Body.Visibility = m.Files.Count > 0 && string.IsNullOrWhiteSpace(m.Text) ? Visibility.Collapsed : Visibility.Visible;
+            SetBody(m.Files.Count > 0 && string.IsNullOrWhiteSpace(m.Text) ? Visibility.Collapsed : Visibility.Visible);
             if (was >= 2)
             {
                 Avatar.Fill = m.AvatarBrush;
@@ -329,6 +331,25 @@ namespace BluePhone
         // ───────────── reply ─────────────
 
         Peer Target() => _core.PeerOf(Message);
+
+        bool _md;
+
+        /// <summary>본문 보이기/숨기기 — 마크다운 쪽지면 서식 표시 영역을 대신 사용</summary>
+        void SetBody(Visibility v)
+        {
+            if (_md) { MdHost.Visibility = v; Body.Visibility = Visibility.Collapsed; }
+            else Body.Visibility = v;
+        }
+
+        void Thumb_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is FileItem f) Media.OpenPreview(f.LocalPath, this);
+        }
+
+        void Preview_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is FileItem f) Media.OpenPreview(f.LocalPath, this);
+        }
 
         void Reply_Click(object sender, RoutedEventArgs e)
         {
