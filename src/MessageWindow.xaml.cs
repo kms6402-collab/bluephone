@@ -70,7 +70,7 @@ namespace BluePhone
             if (m.Files.Count > 0 && string.IsNullOrWhiteSpace(m.Text)) Body.Visibility = Visibility.Collapsed;
 
             Activated += (s, e) => MarkRead();
-            PreviewMouseDown += (s, e) => MarkRead();
+            PreviewMouseDown += (s, e) => { MarkRead(); StopAutoClose(); };
             Loaded += (s, e) => Animate();
             SizeChanged += (s, e) => { if (e.HeightChanged) _core.LayoutPopups(); };
             LocationChanged += (s, e) => { if (!_core.InLayout && IsLoaded) UserMoved = true; };
@@ -127,7 +127,61 @@ namespace BluePhone
 
         void MarkRead()
         {
-            if (!Message.Outgoing && !Message.Read) _core.MarkRead(Message);
+            if (!Message.Outgoing && !Message.Read) _core.MarkRead(Message, fromPopup: true);
+        }
+
+        // ───────────── auto close ─────────────
+
+        System.Windows.Threading.DispatcherTimer _autoTimer;
+        DateTime _autoEnd;
+        int _autoSecs;
+
+        /// <summary>
+        /// 설정한 시간이 지나면 창을 닫는다. 마우스를 올려 두거나 답장을 쓰는 동안에는 멈췄다가 다시 처음부터 센다.
+        /// 닫혀도 쪽지는 '안 읽음'으로 쪽지함에 남는다.
+        /// </summary>
+        public void StartAutoClose(int seconds)
+        {
+            _autoSecs = seconds;
+            _autoEnd = DateTime.Now.AddSeconds(seconds);
+            AutoBar.Visibility = Visibility.Visible;
+            AnimateBar(seconds);
+            _autoTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _autoTimer.Tick += (s, e) =>
+            {
+                if (Busy)
+                {
+                    _autoEnd = DateTime.Now.AddSeconds(_autoSecs);
+                    if (AutoBar.Visibility == Visibility.Visible) { AutoScale.BeginAnimation(ScaleTransform.ScaleXProperty, null); AutoScale.ScaleX = 1; }
+                    _paused = true;
+                    return;
+                }
+                if (_paused) { _paused = false; AnimateBar(_autoSecs); }
+                if (DateTime.Now >= _autoEnd) { StopAutoClose(); Close(); }
+            };
+            _autoTimer.Start();
+            Closed += (s, e) => StopAutoClose();
+        }
+        bool _paused;
+
+        bool Busy => IsMouseOver || _replying || _sending || (IsActive && ReplyBox.IsKeyboardFocusWithin) || ContextMenuOpen;
+        bool ContextMenuOpen => RemindBtn.ContextMenu?.IsOpen == true || System.Windows.Input.Mouse.Captured != null && IsActive;
+
+        void AnimateBar(int seconds) =>
+            AutoScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, 0, TimeSpan.FromSeconds(seconds)));
+
+        void StopAutoClose()
+        {
+            _autoTimer?.Stop();
+            _autoTimer = null;
+            AutoBar.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>다른 곳에서 읽었을 때 닫기 (답장을 쓰는 중이면 그대로 둠)</summary>
+        public void CloseIfIdle()
+        {
+            if ((_replying && ReplyBox.Text.Trim().Length > 0) || _sending) { StopAutoClose(); return; }
+            Close();
         }
 
         void Close_Click(object sender, RoutedEventArgs e)

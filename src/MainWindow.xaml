@@ -99,19 +99,28 @@
 
         <!-- title bar -->
         <DockPanel>
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Top">
+                <Button x:Name="MoreBtn" Style="{StaticResource Chrome}" FontSize="13" ToolTip="메뉴" Click="More_Click">
+                    <Grid>
+                        <TextBlock Text="&#xE712;"/>
+                        <Ellipse x:Name="MoreDot" Width="7" Height="7" Fill="{StaticResource Danger}" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                 Margin="0,-3,-5,0" Visibility="Collapsed" IsHitTestVisible="False"/>
+                    </Grid>
+                </Button>
+                <Button Style="{StaticResource Chrome}" Content="&#xE921;" ToolTip="최소화" Click="Min_Click"/>
+                <Button Style="{StaticResource ChromeClose}" Content="&#xE8BB;" ToolTip="트레이로 숨기기" Click="Close_Click"/>
+            </StackPanel>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Margin="14,0,0,0" VerticalAlignment="Center">
                 <ContentControl ContentTemplate="{StaticResource LogoMark}" Focusable="False"/>
                 <TextBlock Text="파란전화기" FontWeight="SemiBold" Margin="9,0,0,0" VerticalAlignment="Center"/>
                 <TextBlock x:Name="VersionLabel" Foreground="{StaticResource Faint}" FontSize="11.5" Margin="7,1,0,0" VerticalAlignment="Center"/>
-                <Border x:Name="UpdateBadge" Background="{StaticResource AccentSoft}" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center"
-                        Visibility="Collapsed" Cursor="Hand" WindowChrome.IsHitTestVisibleInChrome="True" MouseLeftButtonUp="UpdateBadge_Click" ToolTip="새 버전이 준비되었습니다">
-                    <TextBlock Text="업데이트" Foreground="{StaticResource Accent}" FontSize="11" FontWeight="SemiBold"/>
+                <Border x:Name="UpdateBadge" Background="{StaticResource Accent}" CornerRadius="10" Padding="8,2,9,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                        Visibility="Collapsed" Cursor="Hand" WindowChrome.IsHitTestVisibleInChrome="True" MouseLeftButtonUp="UpdateBadge_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE896;" FontFamily="{StaticResource Glyph}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="0,1,5,0"/>
+                        <TextBlock x:Name="UpdateBadgeText" Text="업데이트" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
                 </Border>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Top">
-                <Button x:Name="MoreBtn" Style="{StaticResource Chrome}" Content="&#xE712;" FontSize="13" ToolTip="메뉴" Click="More_Click"/>
-                <Button Style="{StaticResource Chrome}" Content="&#xE921;" ToolTip="최소화" Click="Min_Click"/>
-                <Button Style="{StaticResource ChromeClose}" Content="&#xE8BB;" ToolTip="트레이로 숨기기" Click="Close_Click"/>
             </StackPanel>
             <Border/>
         </DockPanel>
@@ -210,7 +219,7 @@
         <!-- history -->
         <Grid Grid.Row="4" x:Name="HistoryPane" Visibility="Collapsed">
             <ListBox x:Name="HistoryList" IsSynchronizedWithCurrentItem="False" Style="{StaticResource FlatList}" ItemTemplate="{StaticResource MsgTpl}" SelectionMode="Extended"
-                     Padding="0,6,0,8" MouseDoubleClick="HistoryList_DoubleClick" KeyDown="HistoryList_KeyDown"
+                     Padding="0,6,0,8" MouseDoubleClick="HistoryList_DoubleClick" SelectionChanged="HistoryList_SelectionChanged" KeyDown="HistoryList_KeyDown"
                      VirtualizingPanel.IsVirtualizing="True">
                 <ListBox.ContextMenu>
                     <ContextMenu>

@@ -227,6 +227,20 @@ namespace BluePhone
                 mi.Click += (o, ev) => a();
                 m.Items.Add(mi);
             }
+            var up = Updater.Ready ?? _core.AvailableUpdate;
+            if (up != null && Updater.IsNewer(up))
+            {
+                var mi = new MenuItem
+                {
+                    Header = Updater.Ready != null ? $"새 버전 {up.VersionText} 설치하고 다시 시작" : $"새 버전 {up.VersionText} 업데이트…",
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = (System.Windows.Media.Brush)FindResource("Accent"),
+                    Icon = new TextBlock { Text = "\uE896", FontFamily = (System.Windows.Media.FontFamily)FindResource("Glyph"), Foreground = (System.Windows.Media.Brush)FindResource("Accent") },
+                };
+                mi.Click += (o, ev) => _core.OpenUpdate();
+                m.Items.Add(mi);
+                m.Items.Add(new Separator());
+            }
             Add("새 쪽지", () => Compose_Click(null, null), key: "Ctrl+N");
             Add("동료 다시 찾기", () => _core.Rescan());
             Add("받은 파일 폴더 열기", () => _core.OpenDownloads());
@@ -363,9 +377,25 @@ namespace BluePhone
             if (v != null) _core.SetAlias(p, v);
         }
 
-        public void ShowUpdateBadge(bool on) => UpdateBadge.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        /// <summary>상단 제목줄의 업데이트 알림 (새 버전 번호 + 메뉴 버튼의 빨간 점)</summary>
+        public void ShowUpdateBadge(ReleaseInfo r, bool ready)
+        {
+            bool on = r != null && Updater.IsNewer(r);
+            bool wasOn = UpdateBadge.Visibility == Visibility.Visible;
+            UpdateBadge.Visibility = MoreDot.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            VersionLabel.Visibility = on ? Visibility.Collapsed : Visibility.Visible;   // 좁은 제목줄: 새 버전 알림이 있으면 현재 버전은 툴팁으로
+            if (!on) return;
+            if (!wasOn)
+                UpdateBadge.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(1, 0.5, TimeSpan.FromMilliseconds(600))
+                    { AutoReverse = true, RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(3) });
+            UpdateBadgeText.Text = ready ? $"v{r.VersionText} 설치" : $"v{r.VersionText} 업데이트";
+            UpdateBadge.ToolTip = ready
+                ? $"새 버전 {r.VersionText} 를 받아 두었습니다. 누르면 변경 사항을 보고 바로 설치합니다."
+                : $"새 버전 {r.VersionText} 이(가) 나왔습니다. 누르면 변경 사항을 보고 업데이트합니다.";
+            UpdateBadge.ToolTip += $"\n현재 버전 {AppInfo.VersionText}";
+        }
 
-        async void UpdateBadge_Click(object sender, MouseButtonEventArgs e) => await _core.CheckForUpdates(manual: true);
+        void UpdateBadge_Click(object sender, MouseButtonEventArgs e) => _core.OpenUpdate();
 
         void PmCopy_Click(object sender, RoutedEventArgs e)
         {
@@ -395,6 +425,13 @@ namespace BluePhone
         // ───────────── history ─────────────
 
         ChatMessage[] SelectedMsgs() => HistoryList.SelectedItems.Cast<ChatMessage>().ToArray();
+
+        void HistoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsActive) return;
+            foreach (ChatMessage m in e.AddedItems)
+                if (!m.Outgoing && !m.Read) _core.MarkRead(m);
+        }
 
         void HistoryList_DoubleClick(object sender, MouseButtonEventArgs e)
         {

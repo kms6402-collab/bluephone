@@ -28,6 +28,10 @@ namespace BluePhone
             NoteBox.Text = s.Note;
             SoundChk.IsChecked = s.Sound;
             NoFocusChk.IsChecked = s.PopupNoFocus;
+            foreach (System.Windows.Controls.RadioButton rb in AutoClosePanel.Children)
+                rb.IsChecked = (string)rb.Tag == s.PopupAutoClose.ToString();
+            if (!AutoClosePanel.Children.OfType<System.Windows.Controls.RadioButton>().Any(r => r.IsChecked == true))
+                ((System.Windows.Controls.RadioButton)AutoClosePanel.Children[0]).IsChecked = true;
             ReceiptChk.IsChecked = s.ReadReceipts;
             EnterChk.IsChecked = s.EnterToSend;
             HotkeyChk.IsChecked = s.CaptureHotkey;
@@ -177,6 +181,8 @@ namespace BluePhone
             s.Note = NoteBox.Text.Trim();
             s.Sound = SoundChk.IsChecked == true;
             s.PopupNoFocus = NoFocusChk.IsChecked == true;
+            var ac = AutoClosePanel.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => r.IsChecked == true);
+            s.PopupAutoClose = ac != null && int.TryParse((string)ac.Tag, out int sec) ? sec : 0;
             s.ReadReceipts = ReceiptChk.IsChecked == true;
             s.EnterToSend = EnterChk.IsChecked == true;
             bool hk = HotkeyChk.IsChecked == true;

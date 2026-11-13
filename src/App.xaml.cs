@@ -221,7 +221,7 @@ namespace BluePhone
             _updateTimer.Tick += async (s, e) =>
             {
                 _updateTimer.Interval = TimeSpan.FromHours(6);
-                if (Settings.AutoUpdate) await CheckForUpdates(manual: false);
+                await CheckForUpdates(manual: false);
             };
             _updateTimer.Start();
 
@@ -341,7 +341,9 @@ namespace BluePhone
                 if (Updater.Ready != null) { ShowUpdate(Updater.Ready, true); return "업데이트가 준비되어 있습니다"; }
                 var r = await Updater.CheckAsync();
                 if (!Updater.IsNewer(r)) return $"최신 버전입니다 ({AppInfo.VersionText})";
-                if (!manual && r.VersionText == Settings.SkippedVersion) return null;
+                // 건너뛴 버전·자동 업데이트 꺼짐이어도 상단 메뉴에는 새 버전 알림을 표시
+                SetAvailable(r);
+                if (!manual && (r.VersionText == Settings.SkippedVersion || !Settings.AutoUpdate)) return null;
                 if (manual) { ShowUpdate(r, true); return $"새 버전 {r.VersionText}"; }
                 try { await Updater.DownloadAsync(r, null); }
                 catch { }
@@ -355,12 +357,31 @@ namespace BluePhone
             finally { _checking = false; }
         }
 
+        /// <summary>새 버전이 있으면(받기 전이라도) 상단 메뉴에 알림</summary>
+        public ReleaseInfo AvailableUpdate { get; private set; }
+
+        void SetAvailable(ReleaseInfo r)
+        {
+            AvailableUpdate = r;
+            _main?.ShowUpdateBadge(r, Updater.Ready != null);
+            UpdateTray();
+        }
+
+        /// <summary>상단 알림을 눌렀을 때: 받아 둔 것이 있으면 바로 설치 안내, 아니면 변경 사항과 함께 업데이트 창</summary>
+        public void OpenUpdate()
+        {
+            var r = Updater.Ready ?? AvailableUpdate;
+            if (r != null) ShowUpdate(r, true);
+            else _ = CheckForUpdates(manual: true);
+        }
+
         void ShowUpdate(ReleaseInfo r, bool activate)
         {
             _updateWin?.Close();
             _updateWin = new UpdateWindow(this, r) { ShowActivated = activate, Topmost = !activate };
-            _updateWin.Closed += (s, e) => { _updateWin = null; _main?.ShowUpdateBadge(Updater.Ready != null); };
-            _main?.ShowUpdateBadge(Updater.Ready != null);
+            if (AvailableUpdate == null || Updater.IsNewer(r) && r != AvailableUpdate) AvailableUpdate = r;
+            _updateWin.Closed += (s, e) => { _updateWin = null; _main?.ShowUpdateBadge(AvailableUpdate, Updater.Ready != null); };
+            _main?.ShowUpdateBadge(AvailableUpdate, Updater.Ready != null);
             _updateWin.Show();
         }
 
@@ -698,8 +719,11 @@ namespace BluePhone
                 _ = Send(new[] { peer }, Settings.AutoReply.Trim(), null, false, false, auto: true);
         }
 
-        public void MarkRead(ChatMessage m)
+        /// <summary>읽음 처리. 쪽지 창 밖(대화 창·쪽지함)에서 읽으면 떠 있는 그 쪽지 창도 닫음</summary>
+        public void MarkRead(ChatMessage m, bool fromPopup = false)
         {
+            if (!fromPopup)
+                foreach (var w in _popups.Where(x => x.Message == m).ToList()) w.CloseIfIdle();
             if (m.Outgoing || m.Read) return;
             m.Read = true;
             Store.AppendHistory(m);
@@ -843,6 +867,8 @@ namespace BluePhone
             w.Show();
             LayoutPopups();
             if (m.Urgent && !w.IsActive) Native.Flash(w, untilFocus: true);
+            // 새로 도착한(또는 다시 알림) 쪽지만 자동으로 닫음. 직접 연 창·긴급 쪽지는 그대로 둠
+            if (!activate && !m.Urgent && !m.Outgoing && Settings.PopupAutoClose > 0) w.StartAutoClose(Settings.PopupAutoClose);
         }
 
         public bool InLayout { get; private set; }

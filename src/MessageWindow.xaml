@@ -103,6 +103,12 @@
                      PreviewKeyDown="ReplyBox_PreviewKeyDown"/>
         </Border>
 
+        <!-- 자동 닫기 남은 시간 -->
+        <Border x:Name="AutoBar" Grid.Row="5" Height="2" VerticalAlignment="Top" Background="{StaticResource Accent}" Opacity="0.55"
+                HorizontalAlignment="Stretch" Visibility="Collapsed" Panel.ZIndex="1" RenderTransformOrigin="0,0.5">
+            <Border.RenderTransform><ScaleTransform x:Name="AutoScale"/></Border.RenderTransform>
+        </Border>
+
         <!-- footer -->
         <Border Grid.Row="5" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,10,12,12" Background="{StaticResource Surface}">
             <DockPanel>

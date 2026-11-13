@@ -96,6 +96,20 @@
                     </CheckBox>
                 </Border>
                 <Border Style="{StaticResource Row}">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Text="받은 쪽지 창 자동으로 닫기"/>
+                            <TextBlock Text="정한 시간이 지나면 창이 사라지고 쪽지는 쪽지함에 '안 읽음'으로 남습니다. 마우스를 올리거나 답장 중이면 기다리고, 긴급 쪽지는 닫지 않습니다." Style="{StaticResource Help}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <StackPanel x:Name="AutoClosePanel" Orientation="Horizontal" Margin="0,10,0,0">
+                            <RadioButton GroupName="AutoClose" Style="{StaticResource FilterChip}" Tag="0" Margin="0,0,6,0"><TextBlock Text="닫지 않음" FontSize="12"/></RadioButton>
+                            <RadioButton GroupName="AutoClose" Style="{StaticResource FilterChip}" Tag="10" Margin="0,0,6,0"><TextBlock Text="10초" FontSize="12"/></RadioButton>
+                            <RadioButton GroupName="AutoClose" Style="{StaticResource FilterChip}" Tag="30" Margin="0,0,6,0"><TextBlock Text="30초" FontSize="12"/></RadioButton>
+                            <RadioButton GroupName="AutoClose" Style="{StaticResource FilterChip}" Tag="60"><TextBlock Text="1분" FontSize="12"/></RadioButton>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <Border Style="{StaticResource Row}">
                     <CheckBox x:Name="ReceiptChk" Style="{StaticResource Switch}">
                         <StackPanel>
                             <TextBlock Text="읽음 확인 보내기"/>
