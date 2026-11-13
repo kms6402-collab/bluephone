@@ -73,6 +73,8 @@ namespace BluePhone
             };
 
             core.GroupsChanged += BuildGroupBar;
+            core.PeerRenamed += _ => QueueConversations();
+            AvatarStore.Changed += _ => Dispatcher.BeginInvoke(new Action(QueueConversations));
             BuildGroupBar();
             RefreshMe();
             RefreshCounts();
@@ -161,6 +163,7 @@ namespace BluePhone
 
         bool MsgFilter(ChatMessage m)
         {
+            if (m.Chat) return false;   // 1:1 대화는 대화함에서 따로 관리
             var q = Search?.Text?.Trim();
             if (string.IsNullOrEmpty(q)) return true;
             return Contains(m.Who, q) || Contains(m.Text, q) || Contains(m.PeerDept, q) || m.Files.Any(f => Contains(f.Name, q));
@@ -184,9 +187,13 @@ namespace BluePhone
         {
             int online = _core.Peers.Count(p => p.IsOnline);
             PeerCount.Text = online.ToString();
-            int unread = _core.Unread;
+            int unread = _core.History.Count(m => !m.Outgoing && !m.Read && !m.Chat);
             UnreadBadge.Visibility = unread > 0 ? Visibility.Visible : Visibility.Collapsed;
             UnreadText.Text = unread > 99 ? "99+" : unread.ToString();
+            int chatUnread = _core.History.Count(m => !m.Outgoing && !m.Read && m.Chat);
+            ChatBadge.Visibility = chatUnread > 0 ? Visibility.Visible : Visibility.Collapsed;
+            ChatUnreadText.Text = chatUnread > 99 ? "99+" : chatUnread.ToString();
+            QueueConversations();
 
             bool noPeers = _peers.IsEmpty;
             PeersEmpty.Visibility = noPeers ? Visibility.Visible : Visibility.Collapsed;
@@ -282,6 +289,7 @@ namespace BluePhone
         void Search_Changed(object sender, TextChangedEventArgs e)
         {
             ClearSearch.Visibility = Search.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            QueueConversations();
             _peers?.Refresh();
             _history?.Refresh();
             if (_peers != null) RefreshCounts();
@@ -292,9 +300,10 @@ namespace BluePhone
         void Tab_Changed(object sender, RoutedEventArgs e)
         {
             if (PeersPane == null) return;
-            bool peers = TabPeers.IsChecked == true;
-            PeersPane.Visibility = peers ? Visibility.Visible : Visibility.Collapsed;
-            HistoryPane.Visibility = peers ? Visibility.Collapsed : Visibility.Visible;
+            PeersPane.Visibility = TabPeers.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            HistoryPane.Visibility = TabHistory.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            ChatsPane.Visibility = TabChats.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            if (TabChats.IsChecked == true) BuildConversations();
         }
 
         protected override void OnPreviewKeyDown(KeyEventArgs e)
@@ -471,6 +480,92 @@ namespace BluePhone
                 var p = _core.PeerOf(m);
                 if (p != null) _core.Compose(new[] { p }, quote: m.Text);
             }
+        }
+
+        // ───────────── 대화함 ─────────────
+
+        bool _convQueued;
+
+        /// <summary>여러 변경이 한꺼번에 와도 한 번만 다시 만들도록 모아서 처리</summary>
+        void QueueConversations()
+        {
+            if (_convQueued) return;
+            _convQueued = true;
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() => { _convQueued = false; BuildConversations(); }));
+        }
+
+        void BuildConversations()
+        {
+            if (ChatList == null) return;
+            var selected = ChatList.SelectedItems.Cast<Conversation>().Select(c => c.PeerId).ToList();
+            var q = Search?.Text?.Trim();
+            var list = _core.History.Where(m => m.Chat && !m.Broadcast)
+                .Select(m => new { m, id = m.Outgoing ? (m.ToIds.Count == 1 ? m.ToIds[0] : null) : m.PeerId })
+                .Where(x => x.id != null)
+                .GroupBy(x => x.id)
+                .Select(g =>
+                {
+                    var last = g.OrderByDescending(x => x.m.Ts).First().m;
+                    return new Conversation
+                    {
+                        PeerId = g.Key,
+                        Peer = _core.Peers.FirstOrDefault(p => p.Id == g.Key),
+                        Last = last,
+                        Count = g.Count(),
+                        Unread = g.Count(x => !x.m.Outgoing && !x.m.Read),
+                    };
+                })
+                .Where(c => string.IsNullOrEmpty(q) || Contains(c.Name, q) || _core.History.Any(m => m.Chat && m.Involves(c.PeerId) && Contains(m.Text, q)))
+                .OrderByDescending(c => c.Last.Ts)
+                .ToList();
+            ChatList.ItemsSource = list;
+            foreach (var c in list) if (selected.Contains(c.PeerId)) ChatList.SelectedItems.Add(c);
+            ChatsEmpty.Visibility = list.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            bool searching = !string.IsNullOrEmpty(q);
+            ChatsEmptyTitle.Text = searching ? "검색 결과가 없습니다" : "아직 1:1 대화가 없어요";
+            ChatsEmptyBody.Visibility = searching ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        Conversation[] SelectedConvs() => ChatList.SelectedItems.Cast<Conversation>().ToArray();
+
+        void OpenConversation(Conversation c)
+        {
+            var p = c.Peer ?? _core.Peers.FirstOrDefault(x => x.Id == c.PeerId);
+            if (p != null) _core.OpenChat(p);
+            else Dialog.Alert(this, "대화 창을 열 수 없습니다", "동료 목록에서 삭제된 동료입니다. 다시 접속하면 열 수 있습니다.");
+        }
+
+        void ChatList_DoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if ((e.OriginalSource as FrameworkElement)?.DataContext is Conversation c) OpenConversation(c);
+        }
+
+        void ChatList_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter) CmOpen_Click(null, null);
+            else if (e.Key == Key.Delete) CmDelete_Click(null, null);
+        }
+
+        void CmOpen_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var c in SelectedConvs().Take(6)) OpenConversation(c);
+        }
+
+        void CmRead_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var c in SelectedConvs())
+                foreach (var m in _core.History.Where(x => x.Chat && !x.Outgoing && !x.Read && x.PeerId == c.PeerId).ToList()) _core.MarkRead(m);
+        }
+
+        void CmDelete_Click(object sender, RoutedEventArgs e)
+        {
+            var sel = SelectedConvs();
+            if (sel.Length == 0) return;
+            var names = string.Join(", ", sel.Select(c => c.Name).Take(3)) + (sel.Length > 3 ? $" 외 {sel.Length - 3}명" : "");
+            if (!Dialog.Confirm(this, "대화 내용 삭제", $"{names}님과의 1:1 대화를 내 PC에서 삭제할까요? 쪽지함의 쪽지는 지워지지 않습니다.", "삭제", danger: true)) return;
+            var ids = sel.Select(c => c.PeerId).ToList();
+            var msgs = _core.History.Where(m => m.Chat && ids.Any(id => m.Involves(id))).ToList();
+            _core.DeleteHistory(msgs);
         }
 
         void HmChat_Click(object sender, RoutedEventArgs e)

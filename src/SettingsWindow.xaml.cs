@@ -28,6 +28,10 @@ namespace BluePhone
             NoteBox.Text = s.Note;
             SoundChk.IsChecked = s.Sound;
             NoFocusChk.IsChecked = s.PopupNoFocus;
+            foreach (System.Windows.Controls.RadioButton rb in ChatClosePanel.Children)
+                rb.IsChecked = (string)rb.Tag == s.ChatAlertAutoClose.ToString();
+            if (!ChatClosePanel.Children.OfType<System.Windows.Controls.RadioButton>().Any(r => r.IsChecked == true))
+                ((System.Windows.Controls.RadioButton)ChatClosePanel.Children[1]).IsChecked = true;
             foreach (System.Windows.Controls.RadioButton rb in PrivacyPanel.Children)
                 rb.IsChecked = (string)rb.Tag == s.AlertPrivacy.ToString();
             foreach (System.Windows.Controls.RadioButton rb in AutoClosePanel.Children)
@@ -183,6 +187,8 @@ namespace BluePhone
             s.Note = NoteBox.Text.Trim();
             s.Sound = SoundChk.IsChecked == true;
             s.PopupNoFocus = NoFocusChk.IsChecked == true;
+            var cc = ChatClosePanel.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => r.IsChecked == true);
+            s.ChatAlertAutoClose = cc != null && int.TryParse((string)cc.Tag, out int csec) ? csec : 5;
             var pv = PrivacyPanel.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => r.IsChecked == true);
             s.AlertPrivacy = pv != null && int.TryParse((string)pv.Tag, out int pl) ? pl : 1;
             var ac = AutoClosePanel.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => r.IsChecked == true);

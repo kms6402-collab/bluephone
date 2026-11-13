@@ -283,10 +283,12 @@
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Foreground" Value="{StaticResource Ink2}"/>
         <Setter Property="Height" Value="28"/>
+        <Setter Property="Background" Value="{StaticResource Surface}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource LineStrong}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
-                    <Border x:Name="bd" CornerRadius="14" BorderThickness="1" BorderBrush="{StaticResource LineStrong}" Background="{StaticResource Surface}" Padding="10,0">
+                    <Border x:Name="bd" CornerRadius="14" BorderThickness="1" BorderBrush="{TemplateBinding BorderBrush}" Background="{TemplateBinding Background}" Padding="10,0">
                         <ContentPresenter VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>

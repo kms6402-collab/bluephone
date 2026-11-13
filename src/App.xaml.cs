@@ -706,7 +706,7 @@ namespace BluePhone
 
             bool dnd = _status == Status.Dnd && !m.Urgent;
             // 그 동료와의 대화 창을 보고 있으면 팝업 없이 바로 읽음 처리
-            if (_chats.TryGetValue(peer.Id, out var chat) && chat.IsActive && chat.WindowState != WindowState.Minimized && !m.Urgent)
+            if (_chats.TryGetValue(peer.Id, out var chat) && m.Chat && chat.IsActive && chat.WindowState != WindowState.Minimized && !m.Urgent)
             {
                 MarkRead(m);
             }
@@ -816,8 +816,18 @@ namespace BluePhone
             }
             Native.BringToFront(w);
             if (attach != null) w.Attach(attach);
-            foreach (var m in History.Where(x => !x.Outgoing && !x.Read && x.PeerId == p.Id).ToList()) MarkRead(m);
+            foreach (var m in History.Where(x => x.Chat && !x.Outgoing && !x.Read && x.PeerId == p.Id).ToList()) MarkRead(m);
             return w;
+        }
+
+        /// <summary>대화 창 꾸미기 변경 — 열려 있는 모든 대화 창에 바로 적용하고 저장</summary>
+        public void SetChatLook(string theme = null, string font = null, double? size = null)
+        {
+            if (theme != null) Settings.ChatTheme = theme;
+            if (font != null) Settings.ChatFont = font;
+            if (size.HasValue) Settings.ChatFontSize = size.Value;
+            foreach (var w in _chats.Values) w.ApplyLook();
+            Store.SaveSettings(Settings);
         }
 
         // ───────────────────────── groups ─────────────────────────
@@ -883,7 +893,7 @@ namespace BluePhone
             // 대화 알림은 5초 뒤 바로 사라짐(대화 창에서 이어서 봄)
             if (!activate && !m.Urgent && !m.Outgoing)
             {
-                int secs = m.Chat && !reminder ? 5 : Settings.PopupAutoClose;
+                int secs = m.Chat && !reminder ? Settings.ChatAlertAutoClose : Settings.PopupAutoClose;
                 if (secs > 0) w.StartAutoClose(secs);
             }
         }

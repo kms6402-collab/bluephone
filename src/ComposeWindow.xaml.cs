@@ -88,6 +88,8 @@ namespace BluePhone
 
         void Capture_Click(object sender, RoutedEventArgs e) => _core.StartCapture(this);
 
+        void Emoji_Click(object sender, RoutedEventArgs e) => Emoji.ShowPicker(EmojiBtn, Body);
+
         void Schedule_Click(object sender, RoutedEventArgs e)
         {
             Schedule.Pick(ScheduleBtn, this, at =>

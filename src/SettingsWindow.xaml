@@ -112,6 +112,21 @@
                 <Border Style="{StaticResource Row}">
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Text="1:1 대화 알림 창 자동으로 닫기"/>
+                            <TextBlock Text="대화 창에서 보낸 메시지가 올 때 뜨는 알림 창입니다. 닫혀도 메시지는 대화 창에 '안 읽음'으로 남습니다." Style="{StaticResource Help}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <WrapPanel x:Name="ChatClosePanel" Margin="0,10,0,0">
+                            <RadioButton GroupName="ChatClose" Style="{StaticResource FilterChip}" Tag="0" Margin="0,0,6,6"><TextBlock Text="닫지 않음" FontSize="12"/></RadioButton>
+                            <RadioButton GroupName="ChatClose" Style="{StaticResource FilterChip}" Tag="5" Margin="0,0,6,6"><TextBlock Text="5초" FontSize="12"/></RadioButton>
+                            <RadioButton GroupName="ChatClose" Style="{StaticResource FilterChip}" Tag="10" Margin="0,0,6,6"><TextBlock Text="10초" FontSize="12"/></RadioButton>
+                            <RadioButton GroupName="ChatClose" Style="{StaticResource FilterChip}" Tag="30" Margin="0,0,6,6"><TextBlock Text="30초" FontSize="12"/></RadioButton>
+                            <RadioButton GroupName="ChatClose" Style="{StaticResource FilterChip}" Tag="60" Margin="0,0,6,6"><TextBlock Text="1분" FontSize="12"/></RadioButton>
+                        </WrapPanel>
+                    </DockPanel>
+                </Border>
+                <Border Style="{StaticResource Row}">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top">
                             <TextBlock Text="알림 개인정보 보호"/>
                             <TextBlock Text="쪽지·대화 알림이 뜰 때 화면에 보여 줄 범위입니다. 가려진 알림은 누르거나 '내용 보기'를 눌러야 보이고, 그 전에는 읽음으로 처리하지 않습니다." Style="{StaticResource Help}" TextWrapping="Wrap"/>
                         </StackPanel>

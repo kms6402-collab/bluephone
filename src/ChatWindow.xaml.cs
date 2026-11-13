@@ -29,13 +29,14 @@ namespace BluePhone
         {
             _core = core;
             Peer = peer;
+            ChatLook.Apply(this, core.Settings);
             InitializeComponent();
             Chrome.Apply(this, caption: 58);
             Chrome.NoMaximize(this);
 
             _view = new ListCollectionView(core.History)
             {
-                Filter = o => o is ChatMessage m && m.Involves(peer.Id),
+                Filter = o => o is ChatMessage m && m.Chat && m.Involves(peer.Id),   // 쪽지는 쪽지함에서, 대화 창은 1:1 대화만
             };
             _view.SortDescriptions.Add(new SortDescription(nameof(ChatMessage.Ts), ListSortDirection.Ascending));
             List.ItemsSource = _view;
@@ -60,10 +61,23 @@ namespace BluePhone
             Activated += (s, e) =>
             {
                 _core.LastChat = this;
-                foreach (var m in _core.History.Where(x => !x.Outgoing && !x.Read && x.PeerId == Peer.Id).ToList()) _core.MarkRead(m);
+                foreach (var m in _core.History.Where(x => x.Chat && !x.Outgoing && !x.Read && x.PeerId == Peer.Id).ToList()) _core.MarkRead(m);
             };
             Loaded += (s, e) => { ScrollToEnd(); Input.Focus(); };
-            PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape && Input.Text.Length == 0) Close(); };
+            PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Escape && Input.Text.Length == 0) Close();
+                else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemPlus || e.Key == Key.Add)) { Zoom(+1); e.Handled = true; }
+                else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemMinus || e.Key == Key.Subtract)) { Zoom(-1); e.Handled = true; }
+                else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.D0 || e.Key == Key.NumPad0)) { _core.SetChatLook(size: ChatLook.DefaultSize); e.Handled = true; }
+            };
+            // Ctrl + 마우스 휠로 글자 크기
+            PreviewMouseWheel += (s, e) =>
+            {
+                if (Keyboard.Modifiers != ModifierKeys.Control) return;
+                Zoom(e.Delta > 0 ? +1 : -1);
+                e.Handled = true;
+            };
 
             DragEnter += (s, e) => { if (e.Data.GetDataPresent(DataFormats.FileDrop)) DropOverlay.Visibility = Visibility.Visible; };
             DragLeave += (s, e) => DropOverlay.Visibility = Visibility.Collapsed;
@@ -189,6 +203,67 @@ namespace BluePhone
         }
 
         void Capture_Click(object sender, RoutedEventArgs e) => _core.StartCapture(this);
+
+        void Emoji_Click(object sender, RoutedEventArgs e) => Emoji.ShowPicker(EmojiBtn, Input);
+
+        // ───────────── 꾸미기 ─────────────
+
+        public void ApplyLook() => ChatLook.Apply(this, _core.Settings);
+
+        void Zoom(int step)
+        {
+            var cur = _core.Settings.ChatFontSize <= 0 ? ChatLook.DefaultSize : _core.Settings.ChatFontSize;
+            _core.SetChatLook(size: Math.Max(ChatLook.MinSize, Math.Min(ChatLook.MaxSize, Math.Round(cur) + step)));
+        }
+
+        void Look_Click(object sender, RoutedEventArgs e)
+        {
+            var s = _core.Settings;
+            var m = new ContextMenu { PlacementTarget = LookBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+
+            var theme = new MenuItem { Header = "테마" };
+            foreach (var t in ChatLook.Themes)
+            {
+                var tt = t;
+                var sw = new Grid { Width = 16, Height = 16 };
+                sw.Children.Add(new System.Windows.Shapes.Ellipse { Fill = (Brush)new BrushConverter().ConvertFromString(t.Bg), Stroke = (Brush)FindResource("LineStrong"), StrokeThickness = 1 });
+                sw.Children.Add(new System.Windows.Shapes.Ellipse { Width = 8, Height = 8, Fill = (Brush)new BrushConverter().ConvertFromString(t.Out) });
+                var mi = new MenuItem { Header = t.Name, Icon = sw, IsChecked = (s.ChatTheme ?? "light") == t.Id };
+                mi.Click += (o, ev) => _core.SetChatLook(theme: tt.Id);
+                theme.Items.Add(mi);
+            }
+            m.Items.Add(theme);
+
+            var font = new MenuItem { Header = "글꼴" };
+            foreach (var f in ChatLook.Fonts)
+            {
+                var ff = f;
+                var mi = new MenuItem { Header = f.Name, IsChecked = (s.ChatFont ?? "") == (f.Family ?? "") };
+                if (f.Family != null) mi.FontFamily = new FontFamily(f.Family);
+                mi.Click += (o, ev) => _core.SetChatLook(font: ff.Family ?? "");
+                font.Items.Add(mi);
+            }
+            m.Items.Add(font);
+
+            var size = new MenuItem { Header = "글자 크기" };
+            double cur = s.ChatFontSize <= 0 ? ChatLook.DefaultSize : s.ChatFontSize;
+            foreach (var z in ChatLook.Sizes)
+            {
+                var zz = z;
+                var mi = new MenuItem { Header = z.Name, IsChecked = Math.Abs(cur - z.Size) < 0.01, InputGestureText = z.Size == ChatLook.DefaultSize ? "Ctrl+0" : "" };
+                mi.Click += (o, ev) => _core.SetChatLook(size: zz.Size);
+                size.Items.Add(mi);
+            }
+            size.Items.Add(new Separator());
+            size.Items.Add(new MenuItem { Header = "Ctrl + 마우스 휠, Ctrl + / − 로도 조절", IsEnabled = false });
+            m.Items.Add(size);
+
+            m.Items.Add(new Separator());
+            var reset = new MenuItem { Header = "기본값으로" };
+            reset.Click += (o, ev) => _core.SetChatLook(theme: "light", font: "", size: ChatLook.DefaultSize);
+            m.Items.Add(reset);
+            m.IsOpen = true;
+        }
 
         void Schedule_Click(object sender, RoutedEventArgs e)
         {

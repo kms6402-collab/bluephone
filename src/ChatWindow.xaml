@@ -7,7 +7,7 @@
         <local:BoolToVis x:Key="Vis"/>
 
         <DataTemplate x:Key="FileTpl" DataType="{x:Type local:FileItem}">
-            <Border x:Name="fb" Background="#14000000" CornerRadius="8" Padding="10,7,6,7" Margin="0,6,0,0" MinWidth="200">
+            <Border x:Name="fb" Background="{DynamicResource Ct.FileBg}" CornerRadius="8" Padding="10,7,6,7" Margin="0,6,0,0" MinWidth="200">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -74,8 +74,8 @@
                         </Border>
                         <TextBlock x:Name="grp" FontSize="11" Foreground="{StaticResource Faint}" Text="{Binding Who, StringFormat='여러 명에게 · {0}'}" Visibility="Collapsed"/>
                     </StackPanel>
-                    <Border x:Name="bubble" Background="{StaticResource Canvas}" CornerRadius="14,14,14,4" Padding="12,8" MaxWidth="290"
-                            HorizontalAlignment="Left">
+                    <Border x:Name="bubble" Background="{DynamicResource Ct.In}" TextElement.Foreground="{DynamicResource Ct.InText}"
+                            CornerRadius="14,14,14,4" Padding="12,8" MaxWidth="300" HorizontalAlignment="Left">
                         <Border.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="복사" Click="Copy_Click"/>
@@ -86,14 +86,15 @@
                             </ContextMenu>
                         </Border.ContextMenu>
                         <StackPanel>
-                            <TextBlock x:Name="txt" Text="{Binding Text}" TextWrapping="Wrap" FontSize="13.5" LineHeight="19"
+                            <TextBlock x:Name="txt" local:Emoji.Text="{Binding Text}" TextWrapping="Wrap"
+                                       FontSize="{DynamicResource Ct.Size}" FontFamily="{DynamicResource Ct.Font}"
                                        Visibility="{Binding Text, Converter={StaticResource Vis}}"/>
                             <ItemsControl ItemsSource="{Binding Files}" ItemTemplate="{StaticResource FileTpl}" Focusable="False"/>
                         </StackPanel>
                     </Border>
                     <StackPanel x:Name="metaRow" Orientation="Horizontal" Margin="4,3,4,0" HorizontalAlignment="Left">
-                        <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{StaticResource Faint}"/>
-                        <TextBlock x:Name="meta" Text="{Binding Meta, StringFormat=' · {0}'}" FontSize="11" Foreground="{StaticResource Faint}"
+                        <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource Ct.Meta}"/>
+                        <TextBlock x:Name="meta" Text="{Binding Meta, StringFormat=' · {0}'}" FontSize="11" Foreground="{DynamicResource Ct.Meta}"
                                    Visibility="{Binding Meta, Converter={StaticResource Vis}}"/>
                     </StackPanel>
                 </StackPanel>
@@ -103,9 +104,9 @@
                     <Setter TargetName="av" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="col" Property="HorizontalAlignment" Value="Right"/>
                     <Setter TargetName="bubble" Property="HorizontalAlignment" Value="Right"/>
-                    <Setter TargetName="bubble" Property="Background" Value="{StaticResource Accent}"/>
+                    <Setter TargetName="bubble" Property="Background" Value="{DynamicResource Ct.Out}"/>
                     <Setter TargetName="bubble" Property="CornerRadius" Value="14,14,4,14"/>
-                    <Setter TargetName="bubble" Property="TextElement.Foreground" Value="White"/>
+                    <Setter TargetName="bubble" Property="TextElement.Foreground" Value="{DynamicResource Ct.OutText}"/>
                     <Setter TargetName="metaRow" Property="HorizontalAlignment" Value="Right"/>
                     <Setter TargetName="tags" Property="HorizontalAlignment" Value="Right"/>
                 </DataTrigger>
@@ -117,6 +118,12 @@
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
+
+        <Style x:Key="ThemedChip" TargetType="ToggleButton" BasedOn="{StaticResource Chip}">
+            <Setter Property="Background" Value="{DynamicResource Ct.InputBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Ct.InputLine}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Ct.Sub}"/>
+        </Style>
 
         <Style x:Key="BubbleItem" TargetType="ListBoxItem">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -131,7 +138,7 @@
         </Style>
     </Window.Resources>
 
-    <Grid>
+    <Grid Background="{DynamicResource Ct.Panel}">
         <Grid.RowDefinitions>
             <RowDefinition Height="58"/>
             <RowDefinition Height="*"/>
@@ -139,7 +146,7 @@
         </Grid.RowDefinitions>
 
         <!-- header -->
-        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+        <Border BorderBrush="{DynamicResource Ct.Line}" BorderThickness="0,0,0,1" Background="{DynamicResource Ct.Panel}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -154,39 +161,40 @@
                     <Ellipse x:Name="HDot" Width="7" Height="7" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
                 </Grid>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <TextBlock x:Name="HName" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="HName" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Ct.Text}"/>
                     <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
-                        <TextBlock x:Name="HStatus" Style="{StaticResource Caption}"/>
+                        <TextBlock x:Name="HStatus" Style="{StaticResource Caption}" Foreground="{DynamicResource Ct.Sub}"/>
                         <StackPanel x:Name="HSecure" Orientation="Horizontal" Margin="8,0,0,0" Visibility="Collapsed"
                                     ToolTip="이 동료와의 쪽지·파일은 암호화되어 전송됩니다 (ECDH P-256 + AES-256)">
                             <TextBlock Text="&#xE72E;" FontFamily="{StaticResource Glyph}" FontSize="10.5" Foreground="#1FA971" VerticalAlignment="Center"/>
-                            <TextBlock Text="암호화" Style="{StaticResource Caption}" Margin="3,0,0,0"/>
+                            <TextBlock Text="암호화" Style="{StaticResource Caption}" Margin="3,0,0,0" Foreground="{DynamicResource Ct.Sub}"/>
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
-                    <Button Style="{StaticResource Chrome}" Content="&#xE718;" FontSize="12" ToolTip="항상 위에" Click="Pin_Click" x:Name="PinBtn"/>
-                    <Button Style="{StaticResource Chrome}" Content="&#xE921;" Click="Min_Click"/>
-                    <Button Style="{StaticResource ChromeClose}" Content="&#xE8BB;" Click="Close_Click"/>
+                    <Button x:Name="LookBtn" Style="{StaticResource Chrome}" Content="&#xE790;" FontSize="13" ToolTip="대화 창 꾸미기 — 테마 · 글꼴 · 글자 크기" Click="Look_Click" Foreground="{DynamicResource Ct.Sub}"/>
+                    <Button Style="{StaticResource Chrome}" Content="&#xE718;" FontSize="12" ToolTip="항상 위에" Click="Pin_Click" x:Name="PinBtn" Foreground="{DynamicResource Ct.Sub}"/>
+                    <Button Style="{StaticResource Chrome}" Content="&#xE921;" Click="Min_Click" Foreground="{DynamicResource Ct.Sub}"/>
+                    <Button Style="{StaticResource ChromeClose}" Content="&#xE8BB;" Click="Close_Click" Foreground="{DynamicResource Ct.Sub}"/>
                 </StackPanel>
             </Grid>
         </Border>
 
         <ListBox x:Name="List" Grid.Row="1" ItemTemplate="{StaticResource BubbleTpl}" ItemContainerStyle="{StaticResource BubbleItem}"
-                 BorderThickness="0" Background="{StaticResource Surface}" Padding="0,10,0,10"
+                 BorderThickness="0" Background="{DynamicResource Ct.Bg}" Padding="0,10,0,10"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.ScrollUnit="Pixel" IsSynchronizedWithCurrentItem="False"/>
-        <TextBlock x:Name="Empty" Grid.Row="1" Text="아직 주고받은 쪽지가 없어요" Style="{StaticResource Caption}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <TextBlock x:Name="Empty" Grid.Row="1" Text="아직 주고받은 대화가 없어요" Style="{StaticResource Caption}" Foreground="{DynamicResource Ct.Sub}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
         <!-- composer -->
-        <Border Grid.Row="2" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,10,12,12">
+        <Border Grid.Row="2" BorderBrush="{DynamicResource Ct.Line}" BorderThickness="0,1,0,0" Padding="12,10,12,12" Background="{DynamicResource Ct.Panel}">
             <StackPanel>
-                <ItemsControl x:Name="FileList" Focusable="False" Margin="0,0,0,6">
+                <ItemsControl x:Name="FileList" Focusable="False" Margin="0,0,0,6" TextElement.Foreground="{DynamicResource Ct.Text}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Height="28" Padding="8,0,2,0" Margin="0,0,6,6">
+                            <Border BorderBrush="{DynamicResource Ct.InputLine}" BorderThickness="1" CornerRadius="6" Height="28" Padding="8,0,2,0" Margin="0,0,6,6">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{Binding Name}" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding SizeText}" Style="{StaticResource Caption}" Margin="6,0,0,0" VerticalAlignment="Center"/>
@@ -202,19 +210,22 @@
                         <TextBlock x:Name="ScheduleText" Foreground="{StaticResource Accent}" VerticalAlignment="Center" FontSize="12.5"/>
                     </DockPanel>
                 </Border>
-                <TextBox x:Name="Input" Style="{StaticResource Field}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40" MaxHeight="140"
+                <TextBox x:Name="Input" Style="{StaticResource Field}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40" MaxHeight="160"
+                         Background="{DynamicResource Ct.InputBg}" Foreground="{DynamicResource Ct.Text}" BorderBrush="{DynamicResource Ct.InputLine}"
+                         FontFamily="{DynamicResource Ct.Font}" FontSize="{DynamicResource Ct.Size}"
                          VerticalContentAlignment="Top" Padding="10,9" VerticalScrollBarVisibility="Auto" PreviewKeyDown="Input_PreviewKeyDown"/>
                 <DockPanel Margin="0,8,0,0">
-                    <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE723;" FontSize="15" ToolTip="파일 · 폴더 첨부" Click="Attach_Click"/>
-                    <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE8C6;" FontSize="15" ToolTip="화면 캡처 (Ctrl+Alt+S)" Click="Capture_Click" x:Name="CaptureBtn"/>
-                    <Button DockPanel.Dock="Left" x:Name="ScheduleBtn" Style="{StaticResource Icon}" Content="&#xE823;" FontSize="15" ToolTip="예약 보내기" Click="Schedule_Click"/>
-                    <ToggleButton x:Name="Urgent" DockPanel.Dock="Left" Style="{StaticResource Chip}" Margin="6,0,0,0" VerticalAlignment="Center">
+                    <Button DockPanel.Dock="Left" x:Name="EmojiBtn" Style="{StaticResource Icon}" Content="&#xE76E;" FontSize="15" ToolTip="이모지 · 이모티콘" Click="Emoji_Click" Foreground="{DynamicResource Ct.Sub}"/>
+                    <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE723;" FontSize="15" ToolTip="파일 · 폴더 첨부" Click="Attach_Click" Foreground="{DynamicResource Ct.Sub}"/>
+                    <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE8C6;" FontSize="15" ToolTip="화면 캡처 (Ctrl+Alt+S)" Click="Capture_Click" x:Name="CaptureBtn" Foreground="{DynamicResource Ct.Sub}"/>
+                    <Button DockPanel.Dock="Left" x:Name="ScheduleBtn" Style="{StaticResource Icon}" Content="&#xE823;" FontSize="15" ToolTip="예약 보내기" Click="Schedule_Click" Foreground="{DynamicResource Ct.Sub}"/>
+                    <ToggleButton x:Name="Urgent" DockPanel.Dock="Left" Style="{StaticResource ThemedChip}" Margin="6,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="긴급" FontSize="12.5"/>
                     </ToggleButton>
                     <Button x:Name="SendBtn" DockPanel.Dock="Right" Style="{StaticResource Primary}" Height="32" Padding="16,0" Click="Send_Click">
                         <TextBlock x:Name="SendText" Text="보내기"/>
                     </Button>
-                    <TextBlock x:Name="Hint" Foreground="{StaticResource Faint}" FontSize="11.5" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                    <TextBlock x:Name="Hint" Foreground="{DynamicResource Ct.Meta}" FontSize="11.5" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
                 </DockPanel>
             </StackPanel>
         </Border>

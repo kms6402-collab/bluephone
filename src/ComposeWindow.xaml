@@ -107,6 +107,7 @@
             <DockPanel>
                 <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE723;" FontSize="15" ToolTip="파일 첨부 — 모든 형식 · 폴더는 자동 압축 (끌어다 놓기, Ctrl+V 도 가능)" Click="Attach_Click"/>
                 <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE8C6;" FontSize="15" ToolTip="화면 캡처해서 첨부 (Ctrl+Alt+S)" Click="Capture_Click"/>
+                <Button DockPanel.Dock="Left" x:Name="EmojiBtn" Style="{StaticResource Icon}" Content="&#xE76E;" FontSize="15" ToolTip="이모지 · 이모티콘" Click="Emoji_Click"/>
                 <Button DockPanel.Dock="Left" x:Name="ScheduleBtn" Style="{StaticResource Icon}" Content="&#xE823;" FontSize="15" ToolTip="예약 보내기" Click="Schedule_Click"/>
                 <ToggleButton x:Name="Urgent" DockPanel.Dock="Left" Style="{StaticResource Chip}" Margin="6,0,0,0" VerticalAlignment="Center"
                               ToolTip="받는 사람이 방해 금지 상태여도 알림이 뜨고, 창이 깜박입니다">

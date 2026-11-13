@@ -262,6 +262,12 @@ namespace BluePhone
         public bool PopupNoFocus { get; set; } = true;
         /// <summary>받은 쪽지 창 자동 닫기(초). 0 이면 닫지 않음</summary>
         public int PopupAutoClose { get; set; }
+        /// <summary>1:1 대화 알림 창 자동 닫기(초). 0 이면 닫지 않음</summary>
+        public int ChatAlertAutoClose { get; set; } = 5;
+        /// <summary>대화 창 꾸미기</summary>
+        public string ChatTheme { get; set; } = "light";
+        public string ChatFont { get; set; } = "";
+        public double ChatFontSize { get; set; } = 13.5;
         /// <summary>알림 개인정보 보호: 0 = 보낸 사람·내용 모두 표시, 1 = 보낸 사람만, 2 = 모두 숨기기</summary>
         public int AlertPrivacy { get; set; } = 1;
         public bool StartHidden { get; set; } = false;
@@ -294,5 +300,24 @@ namespace BluePhone
     {
         public string MsgId { get; set; }
         public long At { get; set; }
+    }
+
+    /// <summary>대화함의 한 줄 — 동료 한 명과의 1:1 대화 요약</summary>
+    public sealed class Conversation
+    {
+        public string PeerId { get; set; }
+        public Peer Peer { get; set; }
+        public ChatMessage Last { get; set; }
+        public int Unread { get; set; }
+        public int Count { get; set; }
+        public string Name => Peer?.DisplayName ?? Last?.Who ?? "";
+        public string Initial => string.IsNullOrEmpty(Name) ? "?" : Name.Substring(0, 1);
+        public Brush AvatarBrush => Palette.Avatar(PeerId ?? Name);
+        public ImageSource AvatarImage => PeerId == null ? null : AvatarStore.Get(PeerId);
+        public Brush StatusBrush => Peer?.StatusBrush ?? Status.Brush(Status.Offline);
+        public string Preview => Last == null ? "" : (Last.Outgoing ? "나: " : "") + Last.Preview;
+        public string TimeText => Last?.TimeText ?? "";
+        public bool HasUnread => Unread > 0;
+        public string UnreadText => Unread > 99 ? "99+" : Unread.ToString();
     }
 }
