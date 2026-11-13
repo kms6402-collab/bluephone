@@ -174,7 +174,12 @@
 
         <!-- peers -->
         <Grid Grid.Row="4" x:Name="PeersPane">
-            <ListBox x:Name="PeerList" IsSynchronizedWithCurrentItem="False" Style="{StaticResource FlatList}" ItemTemplate="{StaticResource PeerTpl}" SelectionMode="Extended"
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <WrapPanel x:Name="GroupBar" Margin="14,8,10,0"/>
+            <ListBox Grid.Row="1" x:Name="PeerList" IsSynchronizedWithCurrentItem="False" Style="{StaticResource FlatList}" ItemTemplate="{StaticResource PeerTpl}" SelectionMode="Extended"
                      Padding="0,0,0,8" MouseDoubleClick="PeerList_DoubleClick" KeyDown="PeerList_KeyDown" SelectionChanged="PeerList_SelectionChanged"
                      VirtualizingPanel.IsVirtualizingWhenGrouping="True">
                 <ListBox.GroupStyle>
@@ -182,7 +187,11 @@
                 </ListBox.GroupStyle>
                 <ListBox.ContextMenu>
                     <ContextMenu Opened="PeerMenu_Opened">
-                        <MenuItem x:Name="PmSend" Header="쪽지 보내기" Click="PmSend_Click"/>
+                        <MenuItem x:Name="PmChat" Header="대화 보기" Click="PmChat_Click" FontWeight="SemiBold" InputGestureText="더블클릭"/>
+                        <MenuItem x:Name="PmSend" Header="쪽지 보내기" Click="PmSend_Click" InputGestureText="Enter"/>
+                        <Separator/>
+                        <MenuItem x:Name="PmFav" Header="즐겨찾기에 추가" Click="PmFav_Click"/>
+                        <MenuItem x:Name="PmGroup" Header="그룹에 추가"/>
                         <MenuItem x:Name="PmAlias" Header="별명 지정…" Click="PmAlias_Click"/>
                         <MenuItem x:Name="PmCopy" Header="IP 주소 복사" Click="PmCopy_Click"/>
                         <Separator/>
@@ -190,7 +199,7 @@
                     </ContextMenu>
                 </ListBox.ContextMenu>
             </ListBox>
-            <StackPanel x:Name="PeersEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="32,0,32,40" Visibility="Collapsed">
+            <StackPanel Grid.Row="1" x:Name="PeersEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="32,0,32,40" Visibility="Collapsed">
                 <TextBlock x:Name="PeersEmptyTitle" Text="같은 네트워크의 동료를 찾는 중" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="PeersEmptyBody" TextWrapping="Wrap" TextAlignment="Center" Style="{StaticResource Caption}" Margin="0,6,0,14" LineHeight="18"
                            Text="상대 PC에서도 파란전화기가 실행 중이어야 합니다. 다른 대역의 PC는 설정에서 IP를 직접 추가하세요."/>
@@ -207,6 +216,8 @@
                     <ContextMenu>
                         <MenuItem Header="열기" Click="HmOpen_Click" FontWeight="SemiBold"/>
                         <MenuItem Header="답장" Click="HmReply_Click"/>
+                        <MenuItem Header="대화 보기" Click="HmChat_Click"/>
+                        <MenuItem Header="예약 취소" Click="HmCancel_Click"/>
                         <MenuItem Header="내용 복사" Click="HmCopy_Click"/>
                         <Separator/>
                         <MenuItem Header="삭제" Click="HmDelete_Click" InputGestureText="Del"/>

@@ -61,7 +61,7 @@ namespace BluePhone
         public static void SaveContacts(IEnumerable<Peer> peers) =>
             WriteAtomic(ContactsPath, Json.Serialize(peers.Select(p => new
             {
-                p.Id, p.Name, p.Alias, p.Dept, p.Ip, p.Port, p.Host, p.Note, p.AvatarHash, p.LastSeenTs
+                p.Id, p.Name, p.Alias, p.Dept, p.Ip, p.Port, p.Host, p.Note, p.AvatarHash, p.Favorite, p.LastSeenTs
             }).ToList()));
 
         public static List<ChatMessage> LoadHistory(int max = 3000)

@@ -29,6 +29,9 @@ namespace BluePhone
             SoundChk.IsChecked = s.Sound;
             NoFocusChk.IsChecked = s.PopupNoFocus;
             ReceiptChk.IsChecked = s.ReadReceipts;
+            EnterChk.IsChecked = s.EnterToSend;
+            HotkeyChk.IsChecked = s.CaptureHotkey;
+            if (s.CaptureHotkey && core.HotkeyFailed) HotkeyHelp.Text = "다른 프로그램이 이미 Ctrl+Alt+S 를 쓰고 있어 등록하지 못했습니다";
             AwayBox.Text = s.AutoAwayMinutes.ToString();
             AutoReplyBox.Text = s.AutoReply;
             AutoStartChk.IsChecked = s.AutoStart;
@@ -175,6 +178,9 @@ namespace BluePhone
             s.Sound = SoundChk.IsChecked == true;
             s.PopupNoFocus = NoFocusChk.IsChecked == true;
             s.ReadReceipts = ReceiptChk.IsChecked == true;
+            s.EnterToSend = EnterChk.IsChecked == true;
+            bool hk = HotkeyChk.IsChecked == true;
+            if (hk != s.CaptureHotkey) { s.CaptureHotkey = hk; _core.ApplyHotkey(); }
             s.AutoAwayMinutes = int.TryParse(AwayBox.Text, out int m) ? Math.Max(0, m) : 10;
             s.AutoReply = AutoReplyBox.Text.Trim();
             s.AutoStart = AutoStartChk.IsChecked == true;

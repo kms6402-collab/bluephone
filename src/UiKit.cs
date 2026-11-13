@@ -133,6 +133,7 @@ namespace BluePhone
             Add("파란전화기 열기", core.ShowMain, bold: true);
             Add("새 쪽지", () => core.Compose(new Peer[0]));
             if (core.Unread > 0) Add($"모두 읽음 처리 ({core.Unread})", core.MarkAllRead);
+            Add("화면 캡처해서 보내기", () => core.StartCapture());
             Add("받은 파일 폴더 열기", () => core.OpenDownloads());
             m.Items.Add(new Separator());
             foreach (var s in new[] { Status.Online, Status.Busy, Status.Away, Status.Dnd })

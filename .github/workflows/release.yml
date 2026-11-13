@@ -1,5 +1,5 @@
-# 태그(v*)를 올리면 빌드 → SHA-256 생성 → CHANGELOG 해당 항목을 노트로 GitHub 릴리스 발행
-# 설치된 파란전화기는 이 릴리스를 보고 자동 업데이트한다.
+# 태그(v*)를 올리면 빌드 → (인증서가 등록돼 있으면) 코드 서명 → SHA-256 생성
+# → CHANGELOG 해당 항목을 노트로 GitHub 릴리스 발행. 설치된 파란전화기는 이 릴리스를 보고 자동 업데이트한다.
 name: Release
 
 on:
@@ -27,6 +27,27 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item src/bin/Release/net48/BluePhone.exe dist/BluePhone.exe
+
+      # 선택: 저장소 Secrets 에 SIGN_PFX_BASE64 / SIGN_PFX_PASSWORD 가 있으면 Authenticode 서명.
+      # 신뢰된 인증서(SignPath Foundation 무료 OSS 인증서, 구매한 OV/EV 인증서 등)를 넣으면
+      # '알 수 없는 게시자' 대신 게시자 이름이 표시된다. 없으면 이 단계는 건너뛴다.
+      - name: Code sign (optional)
+        shell: pwsh
+        env:
+          PFX: ${{ secrets.SIGN_PFX_BASE64 }}
+          PFX_PASS: ${{ secrets.SIGN_PFX_PASSWORD }}
+        run: |
+          if (-not $env:PFX) { Write-Host "서명 인증서 없음 — 서명 생략"; exit 0 }
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\sign.pfx", [Convert]::FromBase64String($env:PFX))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          & $signtool.FullName sign /fd SHA256 /f "$env:RUNNER_TEMP\sign.pfx" /p "$env:PFX_PASS" `
+            /tr http://timestamp.digicert.com /td SHA256 /d "파란전화기" dist/BluePhone.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Remove-Item "$env:RUNNER_TEMP\sign.pfx"
+
+      - name: Checksum
+        shell: pwsh
+        run: |
           $hash = (Get-FileHash dist/BluePhone.exe -Algorithm SHA256).Hash.ToLower()
           [IO.File]::WriteAllText("dist/BluePhone.exe.sha256", "$hash  BluePhone.exe")
           $ver = (Get-Item dist/BluePhone.exe).VersionInfo.FileVersion
@@ -39,7 +60,7 @@ jobs:
           $log = Get-Content CHANGELOG.md -Raw -Encoding utf8
           $m = [regex]::Match($log, "(?ms)^##\s*\[?$([regex]::Escape($v))\]?[^\n]*\n(.*?)(?=^##\s|\z)")
           $notes = if ($m.Success) { $m.Groups[1].Value.Trim() } else { "변경 사항은 CHANGELOG.md 를 참고하세요." }
-          $notes += "`n`n---`n**설치/업데이트**: ``BluePhone.exe`` 를 받아 원하는 이름(예: 파란전화기.exe)으로 저장해 실행하세요. 이미 쓰고 있다면 프로그램이 자동으로 업데이트합니다."
+          $notes += "`n`n---`n**설치 (보안 경고 없이)**: PowerShell 에 붙여 넣기`n`n``````powershell`nirm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1 | iex`n```````n`n이미 쓰고 있다면 프로그램이 자동으로 업데이트합니다. ``BluePhone.exe`` 를 직접 받아 원하는 이름으로 저장해 실행해도 됩니다."
           [IO.File]::WriteAllText("notes.md", $notes, [Text.UTF8Encoding]::new($false))
 
       - name: Publish release
@@ -47,5 +68,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" dist/BluePhone.exe dist/BluePhone.exe.sha256 `
+          gh release create "${{ github.ref_name }}" dist/BluePhone.exe dist/BluePhone.exe.sha256 install.ps1 `
             --title "파란전화기 ${{ github.ref_name }}" --notes-file notes.md --latest

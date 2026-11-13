@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Windows.Controls.Primitives;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
@@ -41,6 +43,7 @@ namespace BluePhone
 
             _peers = new ListCollectionView(core.Peers);
             _peers.GroupDescriptions.Add(new PropertyGroupDescription(nameof(Peer.Group)));
+            _peers.SortDescriptions.Add(new SortDescription(nameof(Peer.GroupOrder), ListSortDirection.Ascending));
             _peers.SortDescriptions.Add(new SortDescription(nameof(Peer.Group), ListSortDirection.Ascending));
             _peers.SortDescriptions.Add(new SortDescription(nameof(Peer.SortKey), ListSortDirection.Ascending));
             _peers.SortDescriptions.Add(new SortDescription(nameof(Peer.DisplayName), ListSortDirection.Ascending));
@@ -48,6 +51,7 @@ namespace BluePhone
             _peers.LiveSortingProperties.Add(nameof(Peer.SortKey));
             _peers.LiveSortingProperties.Add(nameof(Peer.DisplayName));
             _peers.LiveSortingProperties.Add(nameof(Peer.Group));
+            _peers.LiveSortingProperties.Add(nameof(Peer.GroupOrder));
             _peers.IsLiveGrouping = true;
             _peers.LiveGroupingProperties.Add(nameof(Peer.Group));
             _peers.IsLiveFiltering = true;
@@ -68,6 +72,8 @@ namespace BluePhone
                 if (e.NewItems != null) foreach (Peer p in e.NewItems) p.PropertyChanged += Peer_PropertyChanged;
             };
 
+            core.GroupsChanged += BuildGroupBar;
+            BuildGroupBar();
             RefreshMe();
             RefreshCounts();
             VersionLabel.Text = AppInfo.VersionText;
@@ -82,9 +88,72 @@ namespace BluePhone
             if (e.PropertyName == nameof(Peer.Status_)) RefreshCounts();
         }
 
+        PeerGroup _groupFilter;
+
+        /// <summary>그룹 필터 칩 (전체 · 즐겨찾기 · 사용자 그룹 · +)</summary>
+        void BuildGroupBar()
+        {
+            GroupBar.Children.Clear();
+            if (_groupFilter != null && !_core.Settings.Groups.Contains(_groupFilter)) _groupFilter = null;
+            ToggleButton Chip(string text, bool on, Action click, PeerGroup g = null)
+            {
+                var b = new ToggleButton { Style = (Style)FindResource("FilterChip"), Content = new TextBlock { Text = text, FontSize = 12 }, IsChecked = on, Margin = new Thickness(0, 0, 6, 6) };
+                b.Click += (s, e) => click();
+                if (g != null)
+                {
+                    var cm = new ContextMenu();
+                    var send = new MenuItem { Header = "그룹에 쪽지 보내기" , FontWeight = FontWeights.SemiBold };
+                    send.Click += (s, e) => { var list = _core.GroupMembers(g); if (list.Count > 0) _core.Compose(list); };
+                    var ren = new MenuItem { Header = "이름 바꾸기…" };
+                    ren.Click += (s, e) =>
+                    {
+                        var v = Dialog.Prompt(this, "그룹 이름 바꾸기", "새 이름을 입력하세요.", g.Name, "저장");
+                        if (!string.IsNullOrWhiteSpace(v)) { g.Name = v.Trim(); _core.SaveGroups(); }
+                    };
+                    var del = new MenuItem { Header = "그룹 삭제" };
+                    del.Click += (s, e) =>
+                    {
+                        if (Dialog.Confirm(this, "그룹 삭제", $"'{g.Name}' 그룹을 삭제할까요? 동료 목록에는 영향이 없습니다.", "삭제", danger: true))
+                        { _core.Settings.Groups.Remove(g); _core.SaveGroups(); }
+                    };
+                    cm.Items.Add(send); cm.Items.Add(ren); cm.Items.Add(new Separator()); cm.Items.Add(del);
+                    b.ContextMenu = cm;
+                    b.ToolTip = $"{_core.GroupMembers(g).Count}명 · 오른쪽 클릭으로 편집";
+                }
+                GroupBar.Children.Add(b);
+                return b;
+            }
+            void Pick(PeerGroup g, bool favOnly) { _groupFilter = g; _favOnly = favOnly; BuildGroupBar(); _peers.Refresh(); RefreshCounts(); }
+            Chip("전체", _groupFilter == null && !_favOnly, () => Pick(null, false));
+            if (_core.Peers.Any(x => x.Favorite)) Chip("★ 즐겨찾기", _favOnly, () => Pick(null, true));
+            else if (_favOnly) _favOnly = false;
+            foreach (var g in _core.Settings.Groups)
+            {
+                var gg = g;
+                Chip(g.Name, _groupFilter == g, () => Pick(gg, false), g);
+            }
+            var add = new Button { Style = (Style)FindResource("Icon"), Content = "\uE710", FontSize = 11, Width = 26, Height = 26, Margin = new Thickness(0, 0, 0, 6), ToolTip = "새 그룹 만들기" };
+            add.Click += (s, e) => NewGroup(SelectedPeers());
+            GroupBar.Children.Add(add);
+        }
+        bool _favOnly;
+
+        PeerGroup NewGroup(IEnumerable<Peer> members)
+        {
+            var name = Dialog.Prompt(this, "새 그룹", "그룹 이름을 입력하세요. (예: 개발팀, 점심 멤버) 동료 목록에서 오른쪽 클릭 → 그룹에 추가로 넣을 수 있습니다.", "", "만들기");
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            var g = new PeerGroup { Name = name.Trim() };
+            foreach (var p in members ?? new Peer[0]) g.Members.Add(p.Id);
+            _core.Settings.Groups.Add(g);
+            _core.SaveGroups();
+            return g;
+        }
+
         bool PeerFilter(Peer p)
         {
             if (_hideOffline && !p.IsOnline) return false;
+            if (_favOnly && !p.Favorite) return false;
+            if (_groupFilter != null && !_groupFilter.Members.Contains(p.Id)) return false;
             var q = Search?.Text?.Trim();
             if (string.IsNullOrEmpty(q)) return true;
             return Contains(p.DisplayName, q) || Contains(p.Dept, q) || Contains(p.Ip, q) || Contains(p.Host, q);
@@ -232,7 +301,7 @@ namespace BluePhone
 
         void PeerList_DoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if ((e.OriginalSource as FrameworkElement)?.DataContext is Peer p) _core.Compose(new[] { p });
+            if ((e.OriginalSource as FrameworkElement)?.DataContext is Peer p) _core.OpenChat(p);
         }
 
         void PeerList_KeyDown(object sender, KeyEventArgs e)
@@ -244,6 +313,32 @@ namespace BluePhone
         {
             var sel = SelectedPeers();
             PmSend.IsEnabled = sel.Length > 0;
+            PmChat.IsEnabled = sel.Length == 1;
+            PmFav.IsEnabled = sel.Length > 0;
+            PmFav.Header = sel.Length > 0 && sel.All(p => p.Favorite) ? "즐겨찾기 해제" : "즐겨찾기에 추가";
+            PmGroup.IsEnabled = sel.Length > 0;
+            PmGroup.Items.Clear();
+            foreach (var g in _core.Settings.Groups)
+            {
+                var gg = g;
+                bool all = sel.All(p => g.Members.Contains(p.Id));
+                var mi = new MenuItem { Header = g.Name, IsChecked = all };
+                mi.Click += (s, ev) =>
+                {
+                    foreach (var p in sel)
+                    {
+                        if (all) gg.Members.Remove(p.Id);
+                        else if (!gg.Members.Contains(p.Id)) gg.Members.Add(p.Id);
+                    }
+                    _core.SaveGroups();
+                    _peers.Refresh();
+                };
+                PmGroup.Items.Add(mi);
+            }
+            if (_core.Settings.Groups.Count > 0) PmGroup.Items.Add(new Separator());
+            var create = new MenuItem { Header = "새 그룹 만들기…" };
+            create.Click += (s, ev) => NewGroup(sel);
+            PmGroup.Items.Add(create);
             PmSend.Header = sel.Length > 1 ? $"{sel.Length}명에게 쪽지 보내기" : "쪽지 보내기";
             PmCopy.IsEnabled = sel.Length == 1;
             PmAlias.IsEnabled = sel.Length == 1;
@@ -252,6 +347,14 @@ namespace BluePhone
         }
 
         void PmSend_Click(object sender, RoutedEventArgs e) => _core.Compose(SelectedPeers());
+        void PmChat_Click(object sender, RoutedEventArgs e) { var p = SelectedPeers().FirstOrDefault(); if (p != null) _core.OpenChat(p); }
+        void PmFav_Click(object sender, RoutedEventArgs e)
+        {
+            var sel = SelectedPeers();
+            bool on = !sel.All(p => p.Favorite);
+            foreach (var p in sel) if (p.Favorite != on) _core.ToggleFavorite(p);
+            BuildGroupBar();
+        }
         void PmAlias_Click(object sender, RoutedEventArgs e)
         {
             var p = SelectedPeers().FirstOrDefault();
@@ -323,6 +426,21 @@ namespace BluePhone
                 var p = _core.PeerOf(m);
                 if (p != null) _core.Compose(new[] { p }, quote: m.Text);
             }
+        }
+
+        void HmChat_Click(object sender, RoutedEventArgs e)
+        {
+            var m = SelectedMsgs().FirstOrDefault();
+            var p = m == null ? null : _core.PeerOf(m);
+            if (p != null) _core.OpenChat(p);
+        }
+
+        void HmCancel_Click(object sender, RoutedEventArgs e)
+        {
+            var list = SelectedMsgs().Where(m => m.Scheduled).ToArray();
+            if (list.Length == 0) return;
+            if (Dialog.Confirm(this, "예약 취소", $"예약된 쪽지 {list.Length}개를 취소할까요?", "예약 취소", danger: true))
+                foreach (var m in list) _core.CancelScheduled(m);
         }
 
         void HmCopy_Click(object sender, RoutedEventArgs e)

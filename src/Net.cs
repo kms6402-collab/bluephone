@@ -22,7 +22,7 @@ namespace BluePhone
     public sealed class NetService : IDisposable
     {
         public const string AppTag = "bluephone";
-        public const int Proto = 1;
+        public const int Proto = 2;
 
         UdpClient _udp;
         TcpListener _tcp;
@@ -175,26 +175,27 @@ namespace BluePhone
                 try
                 {
                     c.ReceiveTimeout = 15000;
-                    var s = c.GetStream();
-                    var p = await ReadFrame(s).ConfigureAwait(false);
+                    var (ch, p) = await Channel.Accept(c.GetStream()).ConfigureAwait(false);
                     if (p == null || Str(p, "app") != AppTag) return;
                     var ip = ((IPEndPoint)c.Client.RemoteEndPoint).Address;
+                    p["_secure"] = ch.Secure;
+                    var ok = new Packet { ["app"] = AppTag, ["ok"] = true };
                     switch (Str(p, "t"))
                     {
                         case "msg":
                             MessageReceived?.Invoke(p, ip);
-                            await WriteFrame(s, new Packet { ["app"] = AppTag, ["ok"] = true }).ConfigureAwait(false);
+                            await ch.SendJson(ok).ConfigureAwait(false);
                             break;
                         case "read":
                             ReadReceived?.Invoke(Str(p, "msg"), Str(p, "id"));
-                            await WriteFrame(s, new Packet { ["app"] = AppTag, ["ok"] = true }).ConfigureAwait(false);
+                            await ch.SendJson(ok).ConfigureAwait(false);
                             break;
                         case "get":
-                            await ServeFile(s, Str(p, "token")).ConfigureAwait(false);
+                            await ServeFile(ch, Str(p, "token")).ConfigureAwait(false);
                             break;
                         case "avatar":
                             var img = AvatarProvider?.Invoke();
-                            await WriteFrame(s, new Packet { ["app"] = AppTag, ["ok"] = true, ["data"] = img == null ? "" : Convert.ToBase64String(img) }).ConfigureAwait(false);
+                            await ch.SendJson(new Packet { ["app"] = AppTag, ["ok"] = true, ["data"] = img == null ? "" : Convert.ToBase64String(img) }).ConfigureAwait(false);
                             break;
                     }
                 }
@@ -212,76 +213,129 @@ namespace BluePhone
         /// <summary>재시작 후에도 예전에 보낸 파일을 받을 수 있도록 기존 토큰 재등록</summary>
         public void Offer(string token, string path) { if (!string.IsNullOrEmpty(token)) _offers[token] = path; }
 
-        async Task ServeFile(NetworkStream s, string token)
+        const int Chunk = 1 << 16;
+
+        async Task ServeFile(Channel ch, string token)
         {
             if (token == null || !_offers.TryGetValue(token, out var path) || !File.Exists(path))
             {
-                await WriteFrame(s, new Packet { ["app"] = AppTag, ["ok"] = false, ["err"] = "보낸 사람이 파일 제공을 중단했습니다." });
+                await ch.SendJson(new Packet { ["app"] = AppTag, ["ok"] = false, ["err"] = "보낸 사람이 파일 제공을 중단했습니다." });
                 return;
             }
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 16, true);
-            await WriteFrame(s, new Packet { ["app"] = AppTag, ["ok"] = true, ["size"] = fs.Length });
-            await fs.CopyToAsync(s, 1 << 16);
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, Chunk, true);
+            await ch.SendJson(new Packet { ["app"] = AppTag, ["ok"] = true, ["size"] = fs.Length, ["chunked"] = ch.Secure });
+            if (!ch.Secure) { await fs.CopyToAsync(ch.Raw, Chunk); return; }
+            var buf = new byte[Chunk];
+            int n;
+            while ((n = await fs.ReadAsync(buf, 0, buf.Length).ConfigureAwait(false)) > 0)
+                await ch.SendBytes(buf, 0, n).ConfigureAwait(false);
         }
 
         // ───────────────────────── client ─────────────────────────
 
+        /// <summary>
+        /// 연결 후 암호 채널을 먼저 시도하고, 상대가 구버전(2.1.x 이하)이면 평문으로 다시 연결.
+        /// </summary>
+        /// <summary>암호 핸드셰이크를 모르는 구버전 상대 (다음부터 바로 평문으로 연결)</summary>
+        readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _legacy = new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>();
+
+        /// <summary>상대가 새 버전으로 바뀌었을 수 있으니(hello 에 enc 표시) 평문 기억을 지움</summary>
+        public void MarkSecureCapable(string ip, int port) => _legacy.TryRemove(ip + ":" + port, out _);
+
+        async Task<(TcpClient c, Channel ch)> Open(string ip, int port, int timeoutMs)
+        {
+            var key = ip + ":" + port;
+            int first = _legacy.TryGetValue(key, out var since) && DateTime.Now - since < TimeSpan.FromHours(1) ? 1 : 0;
+            for (int attempt = first; attempt < 2; attempt++)
+            {
+                bool secure = attempt == 0;
+                var c = new TcpClient(AddressFamily.InterNetwork);
+                try
+                {
+                    var connect = c.ConnectAsync(ip, port);
+                    if (await Task.WhenAny(connect, Task.Delay(timeoutMs)).ConfigureAwait(false) != connect)
+                        throw new TimeoutException("상대 PC에 연결할 수 없습니다.");
+                    await connect.ConfigureAwait(false);
+                    if (!secure) return (c, Channel.Plain(c.GetStream()));
+                    var hs = Channel.ConnectSecure(c.GetStream());
+                    if (await Task.WhenAny(hs, Task.Delay(timeoutMs)).ConfigureAwait(false) == hs && await hs.ConfigureAwait(false) is Channel ch)
+                        return (c, ch);
+                    c.Dispose();   // 구버전: 핸드셰이크를 모르고 연결을 닫음 → 평문 재시도
+                    _legacy[key] = DateTime.Now;
+                }
+                catch (TimeoutException) { c.Dispose(); throw; }
+                catch (SocketException) { c.Dispose(); throw; }
+                catch { c.Dispose(); if (!secure) throw; }
+            }
+            throw new IOException("상대 PC와 통신할 수 없습니다.");
+        }
+
         public async Task<Packet> Request(string ip, int port, Packet p, int timeoutMs = 5000)
         {
-            using var c = new TcpClient(AddressFamily.InterNetwork);
-            var connect = c.ConnectAsync(ip, port);
-            if (await Task.WhenAny(connect, Task.Delay(timeoutMs)).ConfigureAwait(false) != connect)
-                throw new TimeoutException("상대 PC에 연결할 수 없습니다.");
-            await connect.ConfigureAwait(false);
-            var s = c.GetStream();
-            p["app"] = AppTag;
-            await WriteFrame(s, p).ConfigureAwait(false);
-            var read = ReadFrame(s);
-            if (await Task.WhenAny(read, Task.Delay(timeoutMs)).ConfigureAwait(false) != read)
-                throw new TimeoutException("응답이 없습니다.");
-            return await read.ConfigureAwait(false);
+            var (c, ch) = await Open(ip, port, timeoutMs).ConfigureAwait(false);
+            using (c)
+            {
+                p["app"] = AppTag;
+                await ch.SendJson(p).ConfigureAwait(false);
+                var read = ch.RecvJson();
+                if (await Task.WhenAny(read, Task.Delay(timeoutMs)).ConfigureAwait(false) != read)
+                    throw new TimeoutException("응답이 없습니다.");
+                var r = await read.ConfigureAwait(false);
+                if (r != null) r["_secure"] = ch.Secure;
+                return r;
+            }
         }
 
         public async Task Download(string ip, int port, string token, string dest, IProgress<double> progress, CancellationToken ct)
         {
-            using var c = new TcpClient(AddressFamily.InterNetwork);
-            var connect = c.ConnectAsync(ip, port);
-            if (await Task.WhenAny(connect, Task.Delay(6000)).ConfigureAwait(false) != connect)
-                throw new TimeoutException("보낸 사람 PC에 연결할 수 없습니다.");
-            await connect.ConfigureAwait(false);
-            var s = c.GetStream();
-            await WriteFrame(s, new Packet { ["app"] = AppTag, ["t"] = "get", ["token"] = token }).ConfigureAwait(false);
-            var head = await ReadFrame(s).ConfigureAwait(false);
-            if (head == null || !Bool(head, "ok")) throw new IOException(Str(head, "err") ?? "파일을 받을 수 없습니다.");
-            long size = Long(head, "size");
-            var tmp = dest + ".part";
-            try
+            var (c, ch) = await Open(ip, port, 6000).ConfigureAwait(false);
+            using (c)
             {
-                using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, true))
+                await ch.SendJson(new Packet { ["app"] = AppTag, ["t"] = "get", ["token"] = token }).ConfigureAwait(false);
+                var head = await ch.RecvJson().ConfigureAwait(false);
+                if (head == null || !Bool(head, "ok")) throw new IOException(Str(head, "err") ?? "파일을 받을 수 없습니다.");
+                long size = Long(head, "size");
+                bool chunked = Bool(head, "chunked");
+                var tmp = dest + ".part";
+                try
                 {
-                    var buf = new byte[1 << 16];
-                    long got = 0;
-                    while (got < size)
+                    using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, Chunk, true))
                     {
-                        int n = await s.ReadAsync(buf, 0, (int)Math.Min(buf.Length, size - got), ct).ConfigureAwait(false);
-                        if (n <= 0) throw new IOException("전송이 중간에 끊겼습니다.");
-                        await fs.WriteAsync(buf, 0, n, ct).ConfigureAwait(false);
-                        got += n;
-                        progress?.Report(size == 0 ? 1 : (double)got / size);
+                        long got = 0;
+                        var buf = new byte[Chunk];
+                        while (got < size)
+                        {
+                            ct.ThrowIfCancellationRequested();
+                            if (chunked)
+                            {
+                                var part = await ch.RecvBytes().ConfigureAwait(false);
+                                if (part == null) throw new IOException("전송이 중간에 끊겼습니다.");
+                                await fs.WriteAsync(part, 0, part.Length, ct).ConfigureAwait(false);
+                                got += part.Length;
+                            }
+                            else
+                            {
+                                int n = await ch.Raw.ReadAsync(buf, 0, (int)Math.Min(buf.Length, size - got), ct).ConfigureAwait(false);
+                                if (n <= 0) throw new IOException("전송이 중간에 끊겼습니다.");
+                                await fs.WriteAsync(buf, 0, n, ct).ConfigureAwait(false);
+                                got += n;
+                            }
+                            progress?.Report(size == 0 ? 1 : (double)got / size);
+                        }
                     }
+                    if (File.Exists(dest)) File.Delete(dest);
+                    File.Move(tmp, dest);
+                    progress?.Report(1);
                 }
-                if (File.Exists(dest)) File.Delete(dest);
-                File.Move(tmp, dest);
-                progress?.Report(1);
-            }
-            catch
-            {
-                try { File.Delete(tmp); } catch { }
-                throw;
+                catch
+                {
+                    try { File.Delete(tmp); } catch { }
+                    throw;
+                }
             }
         }
 
-        // ───────────────────────── framing ─────────────────────────
+        // ───────────────────────── framing (UDP) ─────────────────────────
 
         static byte[] Encode(Packet p) => Encoding.UTF8.GetBytes(Store.Json.Serialize(p));
 
@@ -289,38 +343,6 @@ namespace BluePhone
         {
             try { return Store.Json.Deserialize<Packet>(Encoding.UTF8.GetString(b, off, len)); }
             catch { return null; }
-        }
-
-        static async Task WriteFrame(Stream s, Packet p)
-        {
-            var body = Encode(p);
-            var head = BitConverter.GetBytes(body.Length);
-            await s.WriteAsync(head, 0, 4).ConfigureAwait(false);
-            await s.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
-            await s.FlushAsync().ConfigureAwait(false);
-        }
-
-        static async Task<Packet> ReadFrame(Stream s)
-        {
-            var head = await ReadExact(s, 4).ConfigureAwait(false);
-            if (head == null) return null;
-            int len = BitConverter.ToInt32(head, 0);
-            if (len <= 0 || len > 8 * 1024 * 1024) return null;
-            var body = await ReadExact(s, len).ConfigureAwait(false);
-            return body == null ? null : Decode(body, 0, len);
-        }
-
-        static async Task<byte[]> ReadExact(Stream s, int n)
-        {
-            var b = new byte[n];
-            int got = 0;
-            while (got < n)
-            {
-                int r = await s.ReadAsync(b, got, n - got).ConfigureAwait(false);
-                if (r <= 0) return null;
-                got += r;
-            }
-            return b;
         }
 
         // ───────────────────────── helpers ─────────────────────────

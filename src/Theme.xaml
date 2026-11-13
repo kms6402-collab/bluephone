@@ -304,6 +304,33 @@
         </Setter>
     </Style>
 
+    <!-- filter chip (blue when selected) -->
+    <Style x:Key="FilterChip" TargetType="ToggleButton">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Foreground" Value="{StaticResource Ink2}"/>
+        <Setter Property="Height" Value="26"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="bd" CornerRadius="13" BorderThickness="1" BorderBrush="{StaticResource Line}" Background="{StaticResource Surface}" Padding="10,0">
+                        <ContentPresenter VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentSoft}"/>
+                            <Setter TargetName="bd" Property="BorderBrush" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- underline tabs -->
     <Style x:Key="Tab" TargetType="RadioButton">
         <Setter Property="Cursor" Value="Hand"/>

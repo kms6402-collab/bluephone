@@ -54,6 +54,7 @@ namespace BluePhone
             };
 
             Updater.Cleanup();
+            Native.ClearMarkOfTheWeb();
             Core = new Core();
             bool relaunched = e.Args.Any(a => a.Equals("--relaunched", StringComparison.OrdinalIgnoreCase));
             // 이전 버전(2.1.0)이 소켓 핸들을 상속시킨 채 재시작한 경우: 셸로 한 번 더 띄워 상속 핸들을 끊는다
@@ -191,6 +192,7 @@ namespace BluePhone
                     if (!string.IsNullOrEmpty(f.LocalPath) && File.Exists(f.LocalPath)) Net.Offer(f.Token, f.LocalPath);
 
             CreateTray();
+            ApplyHotkey();
             _main = new MainWindow(this);
             if (!startHidden) _main.Show();
 
@@ -239,8 +241,33 @@ namespace BluePhone
             Net.ReadReceived += (msg, from) => UI.BeginInvoke(new Action(() => OnRead(msg, from)));
         }
 
+        HotKey _hotkey;
+
+        /// <summary>화면 캡처 전역 단축키 Ctrl+Alt+S (설정에서 끌 수 있음)</summary>
+        public void ApplyHotkey()
+        {
+            _hotkey?.Dispose();
+            _hotkey = null;
+            HotkeyFailed = false;
+            if (!Settings.CaptureHotkey) return;
+            try
+            {
+                _hotkey = new HotKey(HotKey.Ctrl | HotKey.Alt, System.Windows.Input.Key.S, () => StartCapture());
+                if (!_hotkey.Registered) { _hotkey.Dispose(); _hotkey = null; HotkeyFailed = true; }
+            }
+            catch { HotkeyFailed = true; }
+        }
+        public bool HotkeyFailed { get; private set; }
+
+        /// <summary>트레이 풍선 알림</summary>
+        public void Notify(string title, string text)
+        {
+            try { _tray?.ShowBalloonTip(4000, title, text, WinForms.ToolTipIcon.None); } catch { }
+        }
+
         public void Stop()
         {
+            _hotkey?.Dispose();
             // 받아 둔 업데이트가 있으면 종료하면서 교체 (다음 실행부터 새 버전)
             if (Updater.ReadyPath != null) Updater.Apply(restart: false);
             try { Net.SayBye(Settings.Id); } catch { }
@@ -260,6 +287,7 @@ namespace BluePhone
 
         void Tick()
         {
+            RunSchedules();
             // 자동 자리비움
             var idle = Native.IdleTime();
             if (Settings.AutoAwayMinutes > 0)
@@ -298,6 +326,7 @@ namespace BluePhone
             ["host"] = Environment.MachineName,
             ["avatar"] = Settings.AvatarHash ?? "",
             ["ver"] = AppInfo.VersionText,
+            ["enc"] = 1,
         };
 
         // ───────────────────────── update ─────────────────────────
@@ -394,6 +423,7 @@ namespace BluePhone
             p.Host = NetService.Str(h, "host");
             p.Ip = ip.ToString();
             p.Port = NetService.Int(h, "port", Settings.Port);
+            if (NetService.Int(h, "enc", 0) >= 1) Net.MarkSecureCapable(p.Ip, p.Port);
             p.LastSeenTs = DateTimeOffset.Now.ToUnixTimeMilliseconds();
             p.Status_ = NetService.Str(h, "status") ?? Status.Online;
             p.RefreshSub();
@@ -408,6 +438,7 @@ namespace BluePhone
                 wasOffline = true;
             }
             if (wasOffline) Store.SaveContacts(Peers);
+            FlushPending(p);
         }
 
         async void FetchAvatar(Peer p)
@@ -441,7 +472,8 @@ namespace BluePhone
 
         // ───────────────────────── messaging ─────────────────────────
 
-        public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false)
+        /// <summary>쪽지 보내기. at 을 주면 예약, 받지 못한 동료에게는 접속할 때 다시 보냄</summary>
+        public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false, DateTime? at = null)
         {
             var m = new ChatMessage
             {
@@ -467,39 +499,141 @@ namespace BluePhone
                 m.Files.Add(new FileItem { Name = fi.Name, Size = fi.Length, Token = Net.Offer(fi.FullName), LocalPath = fi.FullName });
             }
 
-            var packet = new Packet
+            if (at.HasValue && at.Value > DateTime.Now.AddSeconds(5))
             {
-                ["t"] = "msg",
-                ["id"] = m.Id,
-                ["from"] = Settings.Id,
-                ["name"] = Settings.Name,
-                ["dept"] = Settings.Dept,
-                ["port"] = Settings.Port,
-                ["text"] = text,
-                ["ts"] = m.Ts,
-                ["urgent"] = urgent,
-                ["broadcast"] = broadcast,
-                ["auto"] = auto,
-                ["to"] = m.To,
-                ["files"] = m.Files.Select(f => new Packet { ["name"] = f.Name, ["size"] = f.Size, ["token"] = f.Token }).ToList(),
-            };
+                m.Scheduled = true;
+                m.ScheduledTs = new DateTimeOffset(at.Value).ToUnixTimeMilliseconds();
+                m.Ts = m.ScheduledTs;
+                History.Insert(0, m);
+                Store.AppendHistory(m);
+                return m;
+            }
 
             History.Insert(0, m);
+            await Deliver(m, to);
+            return m;
+        }
+
+        Packet BuildPacket(ChatMessage m) => new Packet
+        {
+            ["t"] = "msg",
+            ["id"] = m.Id,
+            ["from"] = Settings.Id,
+            ["name"] = Settings.Name,
+            ["dept"] = Settings.Dept,
+            ["port"] = Settings.Port,
+            ["text"] = m.Text,
+            ["ts"] = m.Ts,
+            ["urgent"] = m.Urgent,
+            ["broadcast"] = m.Broadcast,
+            ["auto"] = m.Auto,
+            ["to"] = m.To,
+            ["files"] = m.Files.Select(f => new Packet { ["name"] = f.Name, ["size"] = f.Size, ["token"] = f.Token }).ToList(),
+        };
+
+        /// <summary>실제 전송. 실패한 동료는 대기열(PendingTo)에 넣어 접속 시 재전송 (자동응답·전체 공지는 제외)</summary>
+        async Task Deliver(ChatMessage m, IList<Peer> to)
+        {
+            var packet = BuildPacket(m);
+            bool queue = !m.Auto && !m.Broadcast;
             var tasks = to.Select(async p =>
             {
                 try
                 {
+                    if (!p.IsOnline && queue) return (p, ok: false, secure: false);
                     var r = await Net.Request(p.Ip, p.Port, new Packet(packet)).ConfigureAwait(false);
-                    return NetService.Bool(r, "ok") ? null : p.DisplayName;
+                    return (p, ok: NetService.Bool(r, "ok"), secure: NetService.Bool(r, "_secure"));
                 }
-                catch { return p.DisplayName; }
+                catch { return (p, ok: false, secure: false); }
             }).ToList();
             var results = await Task.WhenAll(tasks);
-            m.FailedTo = results.Where(x => x != null).ToList();
-            m.Failed = m.FailedTo.Count == to.Count;
+            foreach (var r in results)
+            {
+                if (r.ok) { r.p.Secure = r.secure; m.Secure |= r.secure; m.PendingTo.Remove(r.p.Id); }
+                else if (queue) { if (!m.PendingTo.Contains(r.p.Id)) m.PendingTo.Add(r.p.Id); }
+                else m.FailedTo.Add(r.p.DisplayName);
+            }
+            m.Failed = m.FailedTo.Count == to.Count && to.Count > 0;
             m.Touch();
             Store.AppendHistory(m);
-            return m;
+        }
+
+        readonly HashSet<string> _flushing = new HashSet<string>();
+
+        /// <summary>동료가 접속하면 그 동료에게 밀린 쪽지를 보냄</summary>
+        async void FlushPending(Peer p)
+        {
+            if (_flushing.Contains(p.Id)) return;
+            var list = History.Where(m => m.Outgoing && !m.Scheduled && m.PendingTo.Contains(p.Id)).OrderBy(m => m.Ts).ToList();
+            if (list.Count == 0) return;
+            _flushing.Add(p.Id);
+            try
+            {
+                foreach (var m in list)
+                {
+                    try
+                    {
+                        var r = await Net.Request(p.Ip, p.Port, BuildPacket(m));
+                        if (!NetService.Bool(r, "ok")) break;
+                        p.Secure = NetService.Bool(r, "_secure");
+                        m.PendingTo.Remove(p.Id);
+                        m.Touch();
+                        Store.AppendHistory(m);
+                    }
+                    catch { break; }
+                }
+            }
+            finally { _flushing.Remove(p.Id); }
+        }
+
+        /// <summary>예약 시각이 된 쪽지 발송, 7일 넘게 전달 못 한 쪽지는 실패 처리</summary>
+        async void RunSchedules()
+        {
+            var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            foreach (var m in History.Where(x => x.Outgoing && x.Scheduled && x.ScheduledTs <= now).ToList())
+            {
+                m.Scheduled = false;
+                m.Ts = now;
+                var peers = m.ToIds.Select(id => Peers.FirstOrDefault(x => x.Id == id)).Where(x => x != null).ToList();
+                m.Touch();
+                await Deliver(m, peers);
+            }
+            var expire = now - TimeSpan.FromDays(7).Ticks / TimeSpan.TicksPerMillisecond;
+            foreach (var m in History.Where(x => x.Outgoing && !x.Scheduled && x.PendingTo.Count > 0 && x.Ts < expire).ToList())
+            {
+                foreach (var id in m.PendingTo) m.FailedTo.Add(Peers.FirstOrDefault(x => x.Id == id)?.DisplayName ?? id);
+                m.PendingTo.Clear();
+                m.Failed = m.FailedTo.Count >= m.To.Count;
+                m.Touch();
+                Store.AppendHistory(m);
+            }
+            // 다시 알림
+            var due = Settings.Reminders.Where(x => x.At <= now).ToList();
+            if (due.Count > 0)
+            {
+                Settings.Reminders.RemoveAll(x => due.Contains(x));
+                Store.SaveSettings(Settings);
+            }
+            foreach (var r in due)
+            {
+                var m = History.FirstOrDefault(x => x.Id == r.MsgId);
+                if (m == null) continue;
+                if (Settings.Sound) Native.PlayChime(false);
+                ShowPopup(m, activate: false, reminder: true);
+            }
+        }
+
+        public void CancelScheduled(ChatMessage m)
+        {
+            if (!m.Scheduled) return;
+            DeleteHistory(new[] { m });
+        }
+
+        public void RemindLater(ChatMessage m, DateTime at)
+        {
+            Settings.Reminders.RemoveAll(r => r.MsgId == m.Id);
+            Settings.Reminders.Add(new Reminder { MsgId = m.Id, At = new DateTimeOffset(at).ToUnixTimeMilliseconds() });
+            Store.SaveSettings(Settings);
         }
 
         void OnMessage(Packet p, IPAddress ip)
@@ -515,6 +649,7 @@ namespace BluePhone
             peer.Ip = ip.ToString();
             peer.Port = NetService.Int(p, "port", Settings.Port);
             if (!peer.IsOnline) { peer.Status_ = Status.Online; peer.LastSeenTs = DateTimeOffset.Now.ToUnixTimeMilliseconds(); }
+            peer.Secure = NetService.Bool(p, "_secure");
 
             var m = new ChatMessage
             {
@@ -530,6 +665,7 @@ namespace BluePhone
                 Urgent = NetService.Bool(p, "urgent"),
                 Broadcast = NetService.Bool(p, "broadcast"),
                 Auto = NetService.Bool(p, "auto"),
+                Secure = NetService.Bool(p, "_secure"),
                 To = NetService.StrList(p, "to"),
                 Files = NetService.ObjList(p, "files").Select(f => new FileItem
                 {
@@ -545,10 +681,16 @@ namespace BluePhone
             UpdateTray();
 
             bool dnd = _status == Status.Dnd && !m.Urgent;
-            if (!dnd)
+            // 그 동료와의 대화 창을 보고 있으면 팝업 없이 바로 읽음 처리
+            if (_chats.TryGetValue(peer.Id, out var chat) && chat.IsActive && chat.WindowState != WindowState.Minimized && !m.Urgent)
+            {
+                MarkRead(m);
+            }
+            else if (!dnd)
             {
                 if (Settings.Sound) Native.PlayChime(m.Urgent);
-                ShowPopup(m);
+                if (chat != null && chat.IsVisible) Native.Flash(chat, false);
+                else ShowPopup(m);
             }
 
             // 부재 시 자동응답
@@ -630,12 +772,66 @@ namespace BluePhone
             w.Activate();
         }
 
-        public void ShowPopup(ChatMessage m, bool activate = false)
+        readonly Dictionary<string, ChatWindow> _chats = new Dictionary<string, ChatWindow>();
+        public ChatWindow LastChat { get; set; }
+
+        /// <summary>1:1 대화 창 (동료마다 하나)</summary>
+        public ChatWindow OpenChat(Peer p, string attach = null)
+        {
+            if (p == null) return null;
+            if (!_chats.TryGetValue(p.Id, out var w))
+            {
+                w = new ChatWindow(this, p);
+                _chats[p.Id] = w;
+                w.Closed += (s, e) => { _chats.Remove(p.Id); if (LastChat == w) LastChat = null; };
+                w.Show();
+            }
+            Native.BringToFront(w);
+            if (attach != null) w.Attach(attach);
+            foreach (var m in History.Where(x => !x.Outgoing && !x.Read && x.PeerId == p.Id).ToList()) MarkRead(m);
+            return w;
+        }
+
+        // ───────────────────────── groups ─────────────────────────
+
+        public void SaveGroups() { Store.SaveSettings(Settings); GroupsChanged?.Invoke(); }
+        public event Action GroupsChanged;
+
+        public void ToggleFavorite(Peer p)
+        {
+            p.Favorite = !p.Favorite;
+            Store.SaveContacts(Peers);
+        }
+
+        public IList<Peer> GroupMembers(PeerGroup g) =>
+            g.Members.Select(id => Peers.FirstOrDefault(x => x.Id == id)).Where(x => x != null).ToList();
+
+        // ───────────────────────── capture ─────────────────────────
+
+        /// <summary>화면 영역 캡처 후 최근 대화 창 또는 새 쪽지 창에 첨부</summary>
+        public void StartCapture(Window target = null)
+        {
+            CaptureWindow.Capture(path =>
+            {
+                if (path == null) return;
+                if (target is ChatWindow cw && cw.IsVisible) { Native.BringToFront(cw); cw.Attach(path); }
+                else if (target is ComposeWindow comp && comp.IsVisible) { Native.BringToFront(comp); comp.Attach(path); }
+                else if (LastChat != null && LastChat.IsVisible) { Native.BringToFront(LastChat); LastChat.Attach(path); }
+                else
+                {
+                    var w = new ComposeWindow(this, new Peer[0], false, null);
+                    w.Show();
+                    w.Attach(path);
+                }
+            });
+        }
+
+        public void ShowPopup(ChatMessage m, bool activate = false, bool reminder = false)
         {
             var existing = _popups.FirstOrDefault(p => p.Message == m);
             if (existing != null) { Native.BringToFront(existing); return; }
 
-            var w = new MessageWindow(this, m);
+            var w = new MessageWindow(this, m) { IsReminder = reminder };
             w.Closed += (s, e) => { _popups.Remove(w); LayoutPopups(); };
             w.Slot = _popups.Count == 0 ? 0 : _popups.Max(p => p.Slot) + 1;
             _popups.Add(w);

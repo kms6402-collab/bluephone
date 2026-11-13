@@ -70,6 +70,18 @@ namespace BluePhone
 
         // ─────────────── 실행 파일 정보 (파일명을 바꿔도 동작) ───────────────
 
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+        static extern bool DeleteFile(string path);
+
+        /// <summary>
+        /// 인터넷에서 받은 표시(Zone.Identifier 대체 데이터 스트림)를 지운다.
+        /// 다음 실행부터 '알 수 없는 게시자' 보안 경고·SmartScreen 확인 창이 다시 뜨지 않는다.
+        /// </summary>
+        public static void ClearMarkOfTheWeb()
+        {
+            try { DeleteFile(ExePath + ":Zone.Identifier"); } catch { }
+        }
+
         public static string ExePath => Process.GetCurrentProcess().MainModule.FileName;
         public static string ExeName => Path.GetFileNameWithoutExtension(ExePath);
 

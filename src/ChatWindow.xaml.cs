@@ -1,0 +1,283 @@
+using System;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
+
+namespace BluePhone
+{
+    /// <summary>한 동료와 주고받은 쪽지를 말풍선 대화로 보여 주는 창</summary>
+    public partial class ChatWindow : Window
+    {
+        readonly Core _core;
+        public Peer Peer { get; }
+        readonly ListCollectionView _view;
+        readonly ObservableCollection<ComposeWindow.Attachment> _files = new ObservableCollection<ComposeWindow.Attachment>();
+        DateTime? _at;
+        bool _sending;
+        int _zipping;
+
+        public ChatWindow(Core core, Peer peer)
+        {
+            _core = core;
+            Peer = peer;
+            InitializeComponent();
+            Chrome.Apply(this, caption: 58);
+
+            _view = new ListCollectionView(core.History)
+            {
+                Filter = o => o is ChatMessage m && m.Involves(peer.Id),
+            };
+            _view.SortDescriptions.Add(new SortDescription(nameof(ChatMessage.Ts), ListSortDirection.Ascending));
+            List.ItemsSource = _view;
+            FileList.ItemsSource = _files;
+
+            foreach (ChatMessage m in _view)
+                foreach (var f in m.Files)
+                {
+                    if (m.Outgoing) f.State = "보낸 파일";
+                    else if (string.IsNullOrEmpty(f.State) && !string.IsNullOrEmpty(f.LocalPath) && File.Exists(f.LocalPath)) f.State = "완료";
+                }
+
+            ((INotifyCollectionChanged)_view).CollectionChanged += (s, e) => { RefreshEmpty(); ScrollToEnd(); };
+            peer.PropertyChanged += Peer_PropertyChanged;
+            Closed += (s, e) => peer.PropertyChanged -= Peer_PropertyChanged;
+            RefreshHeader();
+            RefreshEmpty();
+            UpdateSendState();
+
+            Input.TextChanged += (s, e) => UpdateSendState();
+            _files.CollectionChanged += (s, e) => UpdateSendState();
+            Activated += (s, e) =>
+            {
+                _core.LastChat = this;
+                foreach (var m in _core.History.Where(x => !x.Outgoing && !x.Read && x.PeerId == Peer.Id).ToList()) _core.MarkRead(m);
+            };
+            Loaded += (s, e) => { ScrollToEnd(); Input.Focus(); };
+            PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape && Input.Text.Length == 0) Close(); };
+
+            DragEnter += (s, e) => { if (e.Data.GetDataPresent(DataFormats.FileDrop)) DropOverlay.Visibility = Visibility.Visible; };
+            DragLeave += (s, e) => DropOverlay.Visibility = Visibility.Collapsed;
+            PreviewDragOver += (s, e) => { e.Effects = DragDropEffects.Copy; e.Handled = true; };
+            PreviewDrop += (s, e) =>
+            {
+                DropOverlay.Visibility = Visibility.Collapsed;
+                if (e.Data.GetData(DataFormats.FileDrop) is string[] paths) { AddFiles(paths); e.Handled = true; }
+            };
+            CaptureBtn.ToolTip = core.Settings.CaptureHotkey ? "화면 캡처 (Ctrl+Alt+S)" : "화면 캡처";
+        }
+
+        void Peer_PropertyChanged(object sender, PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(new Action(RefreshHeader));
+
+        void RefreshHeader()
+        {
+            Title = Peer.DisplayName + " — 대화";
+            HName.Text = Peer.DisplayName;
+            HInitial.Text = Peer.Initial;
+            HAvatar.Fill = Peer.AvatarBrush;
+            HPhoto.ImageSource = Peer.AvatarImage;
+            HDot.Fill = Peer.StatusBrush;
+            HStatus.Text = string.Join(" · ", new[] { Peer.StatusText, Peer.Dept }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            HSecure.Visibility = Peer.Secure ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        void RefreshEmpty() => Empty.Visibility = _view.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
+
+        void ScrollToEnd()
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                if (List.Items.Count > 0) List.ScrollIntoView(List.Items[List.Items.Count - 1]);
+            }));
+        }
+
+        void UpdateSendState()
+        {
+            bool has = Input.Text.Trim().Length > 0 || _files.Count > 0;
+            SendBtn.IsEnabled = has && !_sending && _zipping == 0;
+            Hint.Text = _core.Settings.EnterToSend ? "Enter 보내기" : "Ctrl+Enter 보내기";
+            Hint.ToolTip = _core.Settings.EnterToSend ? "Shift+Enter 줄바꿈 · 설정에서 Ctrl+Enter 로 바꿀 수 있습니다" : null;
+            if (!Peer.IsOnline) Hint.Text = "오프라인 · 접속하면 전달";
+        }
+
+        // ───────────── input ─────────────
+
+        void Input_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                bool send = _core.Settings.EnterToSend ? Keyboard.Modifiers == ModifierKeys.None : Keyboard.Modifiers == ModifierKeys.Control;
+                if (send) { e.Handled = true; if (SendBtn.IsEnabled) Send_Click(null, null); }
+                else if (_core.Settings.EnterToSend && Keyboard.Modifiers == ModifierKeys.Shift)
+                {
+                    e.Handled = true;
+                    var i = Input.CaretIndex;
+                    Input.Text = Input.Text.Insert(i, Environment.NewLine);
+                    Input.CaretIndex = i + Environment.NewLine.Length;
+                }
+            }
+            else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                var pasted = ComposeWindow.FromClipboard();
+                if (pasted != null) { AddFiles(pasted); e.Handled = true; }
+            }
+        }
+
+        async void Send_Click(object sender, RoutedEventArgs e)
+        {
+            if (_sending) return;
+            _sending = true;
+            UpdateSendState();
+            var text = Input.Text.TrimEnd();
+            var files = _files.Select(f => f.Path).ToList();
+            var at = _at;
+            Input.Clear();
+            _files.Clear();
+            ClearSchedule_Click(null, null);
+            bool urgent = Urgent.IsChecked == true;
+            Urgent.IsChecked = false;
+            try { await _core.Send(new[] { Peer }, text, files, urgent, false, at: at); }
+            finally { _sending = false; UpdateSendState(); Input.Focus(); }
+            ScrollToEnd();
+        }
+
+        public void Attach(string path) => AddFiles(new[] { path });
+
+        async void AddFiles(System.Collections.Generic.IEnumerable<string> paths)
+        {
+            foreach (var p in paths.ToList())
+            {
+                if (_files.Any(f => string.Equals(f.Source ?? f.Path, p, StringComparison.OrdinalIgnoreCase))) continue;
+                if (Directory.Exists(p))
+                {
+                    var item = new ComposeWindow.Attachment { Path = p, Source = p, SizeText = "압축 중…" };
+                    _files.Add(item);
+                    _zipping++; UpdateSendState();
+                    try
+                    {
+                        var zip = await System.Threading.Tasks.Task.Run(() => ComposeWindow.ZipFolder(p));
+                        var i = _files.IndexOf(item);
+                        if (i >= 0) _files[i] = new ComposeWindow.Attachment { Path = zip, Source = p, SizeText = FileItem.FormatSize(new FileInfo(zip).Length), Kind = "폴더 · ZIP" };
+                    }
+                    catch (Exception ex) { _files.Remove(item); Dialog.Alert(this, "폴더를 압축하지 못했습니다", ex.Message); }
+                    finally { _zipping--; UpdateSendState(); }
+                    continue;
+                }
+                if (!File.Exists(p)) continue;
+                try { _files.Add(new ComposeWindow.Attachment { Path = p, SizeText = FileItem.FormatSize(new FileInfo(p).Length) }); } catch { }
+            }
+        }
+
+        void Attach_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = "첨부할 파일 선택", Filter = "모든 파일 (*.*)|*.*", DereferenceLinks = false };
+            if (dlg.ShowDialog(this) == true) AddFiles(dlg.FileNames);
+        }
+
+        void RemoveFile_Click(object sender, RoutedEventArgs e)
+        {
+            if (((Button)sender).Tag is ComposeWindow.Attachment a) _files.Remove(a);
+        }
+
+        void Capture_Click(object sender, RoutedEventArgs e) => _core.StartCapture(this);
+
+        void Schedule_Click(object sender, RoutedEventArgs e)
+        {
+            Schedule.Pick(ScheduleBtn, this, at =>
+            {
+                _at = at;
+                ScheduleBar.Visibility = Visibility.Visible;
+                ScheduleText.Text = "예약 · " + at.ToString("M월 d일 (ddd) tt h:mm") + " 에 보냅니다";
+                SendText.Text = "예약";
+            });
+        }
+
+        void ClearSchedule_Click(object sender, RoutedEventArgs e)
+        {
+            _at = null;
+            ScheduleBar.Visibility = Visibility.Collapsed;
+            SendText.Text = "보내기";
+        }
+
+        // ───────────── bubbles ─────────────
+
+        static ChatMessage MsgOf(object sender)
+        {
+            if (sender is MenuItem mi && mi.Parent is ContextMenu cm && cm.PlacementTarget is FrameworkElement fe && fe.DataContext is ChatMessage m)
+                return m;
+            return (sender as FrameworkElement)?.DataContext as ChatMessage;
+        }
+
+        void Copy_Click(object sender, RoutedEventArgs e)
+        {
+            var m = MsgOf(sender);
+            if (m != null) try { Clipboard.SetText(m.Text ?? ""); } catch { }
+        }
+
+        void Remind_Click(object sender, RoutedEventArgs e)
+        {
+            var m = MsgOf(sender);
+            if (m != null) _core.RemindLater(m, DateTime.Now.AddMinutes(30));
+        }
+
+        void CancelSchedule_Click(object sender, RoutedEventArgs e)
+        {
+            var m = MsgOf(sender);
+            if (m != null && m.Scheduled) _core.CancelScheduled(m);
+        }
+
+        void Delete_Click(object sender, RoutedEventArgs e)
+        {
+            var m = MsgOf(sender);
+            if (m != null && Dialog.Confirm(this, "쪽지 삭제", "이 쪽지를 내 기록에서 삭제할까요?", "삭제", danger: true))
+                _core.DeleteHistory(new[] { m });
+        }
+
+        async void FileAction_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(((Button)sender).Tag is FileItem f)) return;
+            var m = _core.History.FirstOrDefault(x => x.Files.Contains(f));
+            if (m == null) return;
+            if (f.State == "완료")
+            {
+                try { Process.Start(new ProcessStartInfo(f.LocalPath) { UseShellExecute = true }); } catch { _core.OpenDownloads(f.LocalPath); }
+                return;
+            }
+            var dir = Store.DownloadDir(_core.Settings);
+            string dest = Store.UniquePath(dir, f.Name);
+            if (Keyboard.Modifiers == ModifierKeys.Shift)
+            {
+                var dlg = new Microsoft.Win32.SaveFileDialog { FileName = f.Name, InitialDirectory = dir };
+                if (dlg.ShowDialog(this) != true) return;
+                dest = dlg.FileName;
+            }
+            try { await _core.DownloadFile(m, f, dest); }
+            catch (Exception ex) { Dialog.Alert(this, "파일을 받지 못했습니다", ex.Message); }
+        }
+
+        void FileFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (((Button)sender).Tag is FileItem f) _core.OpenDownloads(f.LocalPath);
+        }
+
+        // ───────────── chrome ─────────────
+
+        void Pin_Click(object sender, RoutedEventArgs e)
+        {
+            Topmost = !Topmost;
+            PinBtn.Foreground = Topmost ? (Brush)FindResource("Accent") : (Brush)FindResource("Ink2");
+            PinBtn.Content = Topmost ? "" : "";
+        }
+
+        void Min_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+        void Close_Click(object sender, RoutedEventArgs e) => Close();
+    }
+}

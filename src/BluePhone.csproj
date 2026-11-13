@@ -17,7 +17,7 @@
     <!-- FileDescription 을 비워 두면 작업 관리자가 실제 exe 파일명을 표시한다 -->
     <GenerateAssemblyTitleAttribute>false</GenerateAssemblyTitleAttribute>
     <!-- 버전: 로컬 빌드 기본값. GitHub Actions 는 태그(v2.1.0)에서 -p:Version 으로 덮어씀 -->
-    <Version>2.1.1</Version>
+    <Version>2.2.0</Version>
     <Company>BluePhone</Company>
     <Product>파란전화기</Product>
     <Copyright>© 2026 파란전화기</Copyright>

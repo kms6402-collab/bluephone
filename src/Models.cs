@@ -87,6 +87,12 @@ namespace BluePhone
         public string Host { get => _host; set { if (Set(ref _host, value)) NamesChanged(); } }
         public string Note { get => _note; set { if (Set(ref _note, value)) Raise(nameof(SubText)); } }
         public string AvatarHash { get => _avatarHash; set => Set(ref _avatarHash, value); }
+        bool _favorite, _secure;
+        /// <summary>즐겨찾기 (내 PC에만 저장) — 목록 맨 위에 고정</summary>
+        public bool Favorite { get => _favorite; set { if (Set(ref _favorite, value)) { Raise(nameof(Group)); Raise(nameof(GroupOrder)); } } }
+        /// <summary>마지막 연결이 암호화되었는지</summary>
+        [ScriptIgnore] public bool Secure { get => _secure; set => Set(ref _secure, value); }
+        [ScriptIgnore] public int GroupOrder => Favorite ? 0 : 1;
         public long LastSeenTs { get; set; }
         public bool HasUnread { get => _hasUnread; set => Set(ref _hasUnread, value); }
 
@@ -104,7 +110,7 @@ namespace BluePhone
         [ScriptIgnore] public Brush StatusBrush => Status.Brush(Status_);
         [ScriptIgnore] public bool IsOnline => Status_ != Status.Offline;
         [ScriptIgnore] public double Opacity => IsOnline ? 1.0 : 0.55;
-        [ScriptIgnore] public string Group => string.IsNullOrWhiteSpace(Dept) ? "부서 미지정" : Dept.Trim();
+        [ScriptIgnore] public string Group => Favorite ? "즐겨찾기" : string.IsNullOrWhiteSpace(Dept) ? "부서 미지정" : Dept.Trim();
         [ScriptIgnore] public string Address => $"{Ip}:{Port}";
         [ScriptIgnore] public string SubText => string.IsNullOrWhiteSpace(Note) ? StatusText : Note;
         [ScriptIgnore] public int SortKey => Status.Order(Status_);
@@ -156,7 +162,15 @@ namespace BluePhone
         public List<string> ToIds { get; set; } = new List<string>();
         public List<string> ReadBy { get; set; } = new List<string>();
         public List<string> FailedTo { get; set; } = new List<string>();
-        public void Touch() { Raise(nameof(Meta)); Raise(nameof(IsProblem)); }
+        /// <summary>아직 전달하지 못해 상대가 접속하면 보낼 동료 ID</summary>
+        public List<string> PendingTo { get; set; } = new List<string>();
+        /// <summary>예약 발송 시각(ms). 0 이면 즉시</summary>
+        public long ScheduledTs { get; set; }
+        public bool Scheduled { get; set; }
+        public bool Secure { get; set; }
+        [ScriptIgnore] public bool IsPending => Outgoing && (Scheduled || PendingTo.Count > 0);
+        [ScriptIgnore] public string ScheduleText => DateTimeOffset.FromUnixTimeMilliseconds(ScheduledTs).LocalDateTime.ToString("M월 d일 tt h:mm");
+        public void Touch() { Raise(nameof(Meta)); Raise(nameof(IsProblem)); Raise(nameof(IsPending)); Raise(nameof(TimeText)); }
         [ScriptIgnore] public bool IsProblem => Outgoing && (Failed || FailedTo.Count > 0);
         [ScriptIgnore] public bool IsUnread => !Outgoing && !Read;
         public bool Read { get => _read; set { if (Set(ref _read, value)) { Raise(nameof(Meta)); Raise(nameof(IsUnread)); } } }
@@ -209,16 +223,20 @@ namespace BluePhone
                 if (Broadcast) parts.Add("전체 공지");
                 if (Urgent) parts.Add("긴급");
                 if (Auto) parts.Add("자동응답");
-                if (Outgoing)
+                if (Outgoing && Scheduled) parts.Add("예약 · " + ScheduleText);
+                else if (Outgoing && PendingTo.Count > 0)
+                    parts.Add(To.Count <= 1 ? "대기 중 · 상대가 접속하면 전달" : $"대기 {PendingTo.Count}명");
+                if (Outgoing && !Scheduled)
                 {
-                    if (To.Count <= 1) parts.Add(Failed ? "전달 실패" : Read ? "읽음" : "전달됨");
+                    if (To.Count <= 1 && PendingTo.Count > 0) { }
+                    else if (To.Count <= 1) parts.Add(Failed ? "전달 실패" : Read ? "읽음" : "전달됨");
                     else
                     {
                         parts.Add($"읽음 {ReadBy.Count}/{To.Count - FailedTo.Count}");
                         if (FailedTo.Count > 0) parts.Add($"실패 {FailedTo.Count}");
                     }
                 }
-                else if (!Read) parts.Add("안 읽음");
+                else if (!Outgoing && !Read) parts.Add("안 읽음");
                 if (Files.Count > 0) parts.Add("첨부 " + Files.Count);
                 return string.Join(" · ", parts);
             }
@@ -249,9 +267,25 @@ namespace BluePhone
         public bool AutoUpdate { get; set; } = true;
         public string SkippedVersion { get; set; } = "";
         public string LastRunVersion { get; set; } = "";
+        public List<PeerGroup> Groups { get; set; } = new List<PeerGroup>();
+        public List<Reminder> Reminders { get; set; } = new List<Reminder>();
+        public bool CaptureHotkey { get; set; } = true;
+        public bool EnterToSend { get; set; } = true;
         public double WinLeft { get; set; } = -1e6;
         public double WinTop { get; set; } = -1e6;
         public double WinWidth { get; set; } = 340;
         public double WinHeight { get; set; } = 640;
+    }
+
+    public class PeerGroup
+    {
+        public string Name { get; set; }
+        public List<string> Members { get; set; } = new List<string>();
+    }
+
+    public class Reminder
+    {
+        public string MsgId { get; set; }
+        public long At { get; set; }
     }
 }

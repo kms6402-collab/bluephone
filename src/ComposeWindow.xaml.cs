@@ -81,6 +81,55 @@ namespace BluePhone
             KeyDown += (s, e) => { if (e.Key == Key.Escape && Body.Text.Length == 0 && _files.Count == 0) Close(); };
         }
 
+        DateTime? _at;
+
+        public void Attach(string path) => AddFiles(new[] { path });
+
+        void Capture_Click(object sender, RoutedEventArgs e) => _core.StartCapture(this);
+
+        void Schedule_Click(object sender, RoutedEventArgs e)
+        {
+            Schedule.Pick(ScheduleBtn, this, at =>
+            {
+                _at = at;
+                ScheduleBar.Visibility = Visibility.Visible;
+                ScheduleText.Text = "예약 · " + at.ToString("M월 d일 (ddd) tt h:mm") + " 에 보냅니다";
+                if (!_sending) SendText.Text = "예약";
+            });
+        }
+
+        void ClearSchedule_Click(object sender, RoutedEventArgs e)
+        {
+            _at = null;
+            ScheduleBar.Visibility = Visibility.Collapsed;
+            if (!_sending) SendText.Text = "보내기";
+        }
+
+        /// <summary>클립보드의 파일 목록 또는 이미지(PNG 로 저장) — 없으면 null</summary>
+        internal static IList<string> FromClipboard()
+        {
+            try
+            {
+                if (Clipboard.ContainsFileDropList()) return Clipboard.GetFileDropList().Cast<string>().ToList();
+                if (Clipboard.ContainsImage() && !Clipboard.ContainsText())
+                {
+                    var img = Clipboard.GetImage();
+                    var dir = Path.Combine(Path.GetTempPath(), "BluePhone");
+                    Directory.CreateDirectory(dir);
+                    var path = Path.Combine(dir, $"캡처 {DateTime.Now:yyyy-MM-dd HHmmss}.png");
+                    using (var fs = File.Create(path))
+                    {
+                        var enc = new PngBitmapEncoder();
+                        enc.Frames.Add(BitmapFrame.Create(img));
+                        enc.Save(fs);
+                    }
+                    return new[] { path };
+                }
+            }
+            catch { }
+            return null;
+        }
+
         void UpdateSendState()
         {
             bool hasContent = Body.Text.Trim().Length > 0 || _files.Count > 0;
@@ -105,13 +154,24 @@ namespace BluePhone
             if (candidates.Count == 0)
                 m.Items.Add(new MenuItem { Header = "추가할 동료가 없습니다", IsEnabled = false });
             var online = candidates.Where(p => p.IsOnline).ToList();
+            bool any = false;
             if (online.Count > 1)
             {
                 var all = new MenuItem { Header = $"접속 중인 동료 모두 ({online.Count})", FontWeight = FontWeights.SemiBold };
                 all.Click += (o, ev) => { foreach (var p in online) _to.Add(p); };
                 m.Items.Add(all);
-                m.Items.Add(new Separator());
+                any = true;
             }
+            foreach (var g in _core.Settings.Groups)
+            {
+                var members = _core.GroupMembers(g).Where(p => !_to.Contains(p)).ToList();
+                if (members.Count == 0) continue;
+                var gi = new MenuItem { Header = $"그룹 · {g.Name} ({members.Count})", FontWeight = FontWeights.SemiBold };
+                gi.Click += (o, ev) => { foreach (var p in members) if (!_to.Contains(p)) _to.Add(p); };
+                m.Items.Add(gi);
+                any = true;
+            }
+            if (any) m.Items.Add(new Separator());
             foreach (var p in candidates.Take(60))
             {
                 var peer = p;
@@ -178,7 +238,7 @@ namespace BluePhone
 
         int _zipping;
 
-        static string ZipFolder(string dir)
+        internal static string ZipFolder(string dir)
         {
             var name = new DirectoryInfo(dir).Name;
             var tmpDir = Path.Combine(Path.GetTempPath(), "BluePhone", Guid.NewGuid().ToString("N").Substring(0, 8));
@@ -209,30 +269,8 @@ namespace BluePhone
             }
             else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control)
             {
-                try
-                {
-                    if (Clipboard.ContainsFileDropList())
-                    {
-                        AddFiles(Clipboard.GetFileDropList().Cast<string>());
-                        e.Handled = true;
-                    }
-                    else if (Clipboard.ContainsImage() && !Clipboard.ContainsText())
-                    {
-                        var img = Clipboard.GetImage();
-                        var dir = Path.Combine(Path.GetTempPath(), "BluePhone");
-                        Directory.CreateDirectory(dir);
-                        var path = Path.Combine(dir, $"캡처 {DateTime.Now:yyyy-MM-dd HHmmss}.png");
-                        using (var fs = File.Create(path))
-                        {
-                            var enc = new PngBitmapEncoder();
-                            enc.Frames.Add(BitmapFrame.Create(img));
-                            enc.Save(fs);
-                        }
-                        AddFiles(new[] { path });
-                        e.Handled = true;
-                    }
-                }
-                catch { }
+                var pasted = FromClipboard();
+                if (pasted != null) { AddFiles(pasted); e.Handled = true; }
             }
         }
 
@@ -254,7 +292,7 @@ namespace BluePhone
             }
 
             var targets = _to.ToList();
-            var m = await _core.Send(targets, text, _files.Select(f => f.Path).ToList(), Urgent.IsChecked == true, _broadcast);
+            var m = await _core.Send(targets, text, _files.Select(f => f.Path).ToList(), Urgent.IsChecked == true, _broadcast, at: _at);
 
             if (m.Failed)
             {
@@ -267,9 +305,15 @@ namespace BluePhone
                 return;
             }
             Close();
+            if (m.PendingTo.Count > 0 && !m.Scheduled)
+                Toast(m.PendingTo.Count == targets.Count && targets.Count == 1
+                    ? $"{targets[0].DisplayName}님이 지금 오프라인이라 대기열에 넣었습니다. 접속하면 자동으로 전달됩니다."
+                    : $"{m.PendingTo.Count}명은 오프라인이라 접속하면 자동으로 전달됩니다.");
             if (m.FailedTo.Count > 0)
                 Dialog.Alert(null, "일부에게 전달하지 못했습니다", string.Join(", ", m.FailedTo) + "\n\n접속이 끊겼거나 방화벽이 막고 있을 수 있습니다.");
         }
+
+        void Toast(string text) => _core.Notify("대기열에 넣었습니다", text);
 
         void Min_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 

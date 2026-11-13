@@ -107,6 +107,8 @@
         <Border Grid.Row="5" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,10,12,12" Background="{StaticResource Surface}">
             <DockPanel>
                 <Button DockPanel.Dock="Left" Style="{StaticResource Icon}" Content="&#xE8C8;" ToolTip="내용 복사" Click="Copy_Click"/>
+                <Button DockPanel.Dock="Left" x:Name="ChatBtn" Style="{StaticResource Icon}" Content="&#xE8BD;" ToolTip="대화 보기 — 이 동료와 주고받은 쪽지를 말풍선으로" Click="Chat_Click"/>
+                <Button DockPanel.Dock="Left" x:Name="RemindBtn" Style="{StaticResource Icon}" Content="&#xE916;" ToolTip="다시 알림" Click="Remind_Click"/>
                 <Button x:Name="ReplyBtn" DockPanel.Dock="Right" Style="{StaticResource Primary}" Height="34" Padding="18,0" MinWidth="84" Click="Reply_Click">
                     <TextBlock x:Name="ReplyText" Text="답장"/>
                 </Button>

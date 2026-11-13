@@ -17,6 +17,13 @@ namespace BluePhone
         public ChatMessage Message { get; }
         public int Slot { get; set; }
         public bool UserMoved { get; set; }
+        bool _reminder;
+        /// <summary>'다시 알림'으로 다시 뜬 팝업</summary>
+        public bool IsReminder
+        {
+            get => _reminder;
+            set { _reminder = value; if (value && !Message.Urgent) SetTag("다시 알림", "Accent", "AccentSoft"); }
+        }
         bool _replying, _sending;
         string _lastSaved;
 
@@ -55,6 +62,8 @@ namespace BluePhone
             if (m.Urgent) { UrgentLine.Visibility = Visibility.Visible; SetTag("긴급", "Danger", "DangerSoft"); }
             else if (m.Broadcast) SetTag("전체 공지", "Accent", "AccentSoft");
             else if (m.Auto) SetTag("자동응답", "Muted", "Hover");
+
+            if (m.Broadcast || (m.Outgoing && m.ToIds.Count != 1) || _core.PeerOf(m) == null) ChatBtn.Visibility = Visibility.Collapsed;
 
             FileList.ItemsSource = m.Files;
             FileList.Visibility = m.Files.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -125,6 +134,40 @@ namespace BluePhone
         {
             MarkRead();
             Close();
+        }
+
+        void Chat_Click(object sender, RoutedEventArgs e)
+        {
+            MarkRead();
+            var p = _core.PeerOf(Message);
+            if (p == null) return;
+            _core.OpenChat(p);
+            Close();
+        }
+
+        void Remind_Click(object sender, RoutedEventArgs e)
+        {
+            var now = DateTime.Now;
+            var menu = new ContextMenu { PlacementTarget = RemindBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Top };
+            menu.Items.Add(new MenuItem { Header = "다시 알림", IsEnabled = false, FontWeight = FontWeights.SemiBold });
+            void Add(string label, DateTime at)
+            {
+                var mi = new MenuItem { Header = label, InputGestureText = at.Date == now.Date ? at.ToString("tt h:mm") : at.ToString("M/d tt h:mm") };
+                mi.Click += (s, ev) =>
+                {
+                    _core.RemindLater(Message, at);
+                    MarkRead();
+                    _core.Notify("다시 알려 드릴게요", at.ToString("M월 d일 tt h:mm") + " 에 이 쪽지를 다시 띄웁니다.");
+                    Close();
+                };
+                menu.Items.Add(mi);
+            }
+            Add("10분 뒤", now.AddMinutes(10));
+            Add("30분 뒤", now.AddMinutes(30));
+            Add("1시간 뒤", now.AddHours(1));
+            var tomorrow = now.Date.AddDays(1).AddHours(9);
+            Add("내일 오전 9시", tomorrow);
+            menu.IsOpen = true;
         }
 
         void Copy_Click(object sender, RoutedEventArgs e)

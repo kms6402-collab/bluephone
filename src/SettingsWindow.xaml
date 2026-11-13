@@ -103,6 +103,22 @@
                         </StackPanel>
                     </CheckBox>
                 </Border>
+                <Border Style="{StaticResource Row}">
+                    <CheckBox x:Name="EnterChk" Style="{StaticResource Switch}">
+                        <StackPanel>
+                            <TextBlock Text="대화 창에서 Enter 로 보내기"/>
+                            <TextBlock Text="끄면 Ctrl+Enter 로 보내고, Enter 는 줄바꿈이 됩니다" Style="{StaticResource Help}"/>
+                        </StackPanel>
+                    </CheckBox>
+                </Border>
+                <Border Style="{StaticResource Row}">
+                    <CheckBox x:Name="HotkeyChk" Style="{StaticResource Switch}">
+                        <StackPanel>
+                            <TextBlock Text="화면 캡처 단축키 Ctrl+Alt+S"/>
+                            <TextBlock x:Name="HotkeyHelp" Text="어디서든 영역을 드래그해 바로 쪽지에 첨부합니다" Style="{StaticResource Help}"/>
+                        </StackPanel>
+                    </CheckBox>
+                </Border>
 
                 <!-- away -->
                 <TextBlock Text="자리 비움" Style="{StaticResource Section}"/>
