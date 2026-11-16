@@ -63,18 +63,25 @@ namespace BluePhone
             p["t"] = "hello";
             p["reply"] = wantReply;
             var data = Encode(p);
-            foreach (var ep in BroadcastTargets())
-                try { _udp?.Send(data, data.Length, ep); } catch { }
+            // 목록은 지금(UI 스레드) 만들고, PC 이름 조회(DNS) · 전송은 백그라운드에서 → 조회가 느려도 창이 멈추지 않음
+            var extra = ExtraTargets?.Invoke()?.ToList() ?? new List<string>();
+            Task.Run(() =>
+            {
+                foreach (var ep in BroadcastTargets(extra))
+                    try { _udp?.Send(data, data.Length, ep); } catch { }
+            });
         }
 
         public void SayBye(string myId)
         {
             var data = Encode(new Packet { ["app"] = AppTag, ["t"] = "bye", ["id"] = myId });
-            foreach (var ep in BroadcastTargets())
+            var extra = (ExtraTargets?.Invoke() ?? Enumerable.Empty<string>())
+                .Where(h => TrySplit(h, out var host, out _, Port) && IPAddress.TryParse(host, out _)).ToList();
+            foreach (var ep in BroadcastTargets(extra))
                 try { _udp?.Send(data, data.Length, ep); } catch { }
         }
 
-        IEnumerable<IPEndPoint> BroadcastTargets()
+        IEnumerable<IPEndPoint> BroadcastTargets(IEnumerable<string> extra = null)
         {
             var set = new HashSet<string> { "255.255.255.255" };
             try
@@ -95,12 +102,52 @@ namespace BluePhone
             }
             catch { }
             var list = set.Select(s => new IPEndPoint(IPAddress.Parse(s), Port)).ToList();
-            foreach (var host in ExtraTargets?.Invoke() ?? Enumerable.Empty<string>())
+            foreach (var host in extra ?? Enumerable.Empty<string>())
             {
                 var ep = ParseHost(host, Port);
                 if (ep != null) list.Add(ep);
             }
             return list;
+        }
+
+        /// <summary>한 PC에만 접속 알림 (UDP)</summary>
+        public void AnnounceTo(IPEndPoint ep, bool wantReply)
+        {
+            var p = HelloFactory();
+            p["t"] = "hello";
+            p["reply"] = wantReply;
+            var data = Encode(p);
+            try { _udp?.Send(data, data.Length, ep); } catch { }
+        }
+
+        /// <summary>
+        /// "IP", "IP:포트", "PC이름:포트" 로 상대에게 TCP 로 접속 알림을 보내고 상대 정보를 받음.
+        /// UDP 가 막혀 있거나 서로 다른 포트를 쓰는 PC도 연결됨
+        /// </summary>
+        public async Task<(Packet hello, IPEndPoint ep)> Probe(string text, int defPort, int timeoutMs = 4000)
+        {
+            var ep = await Task.Run(() => ParseHost(text, defPort)).ConfigureAwait(false);
+            if (ep == null) throw new ArgumentException("주소를 찾을 수 없습니다.");
+            var me = HelloFactory();
+            me["t"] = "hello"; me["reply"] = false;
+            Packet r = null;
+            try { r = await Request(ep.Address.ToString(), ep.Port, me, timeoutMs).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is SocketException) && !(ex is TimeoutException && ex.Message.StartsWith("상대"))) { r = null; }
+            if (r != null && (Str(r, "t") != "hello" || string.IsNullOrEmpty(Str(r, "id")))) r = null;
+            return (r, ep);
+        }
+
+        /// <summary>"주소" 또는 "주소:포트" 형식인지 (포트 1~65535)</summary>
+        public static bool TrySplit(string text, out string host, out int port, int defPort)
+        {
+            host = (text ?? "").Trim(); port = defPort;
+            var idx = host.LastIndexOf(':');
+            if (idx > 0)
+            {
+                if (!int.TryParse(host.Substring(idx + 1), out port) || port < 1 || port > 65535) return false;
+                host = host.Substring(0, idx).Trim();
+            }
+            return host.Length > 0 && !host.Contains(" ");
         }
 
         public static IPEndPoint ParseHost(string text, int defPort)
@@ -185,6 +232,13 @@ namespace BluePhone
                         case "msg":
                             MessageReceived?.Invoke(p, ip);
                             await ch.SendJson(ok).ConfigureAwait(false);
+                            break;
+                        case "hello":
+                            // 주소로 직접 추가 · 연결 유지: 받은 쪽도 상대를 목록에 올리고 내 정보를 돌려줌
+                            HelloReceived?.Invoke(p, ip);
+                            var me = HelloFactory();
+                            me["t"] = "hello"; me["reply"] = false;
+                            await ch.SendJson(me).ConfigureAwait(false);
                             break;
                         case "read":
                             ReadReceived?.Invoke(Str(p, "msg"), Str(p, "id"));

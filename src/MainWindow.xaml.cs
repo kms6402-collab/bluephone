@@ -301,7 +301,7 @@ namespace BluePhone
                 : "같은 네트워크의 동료를 찾는 중";
             PeersEmptyBody.Text = inGroup
                 ? "그룹 버튼을 오른쪽 클릭 → 구성원 추가 · 빼기로 동료를 넣을 수 있습니다."
-                : "상대 PC에서도 파란전화기가 실행 중이어야 합니다. 다른 대역의 PC는 설정에서 IP를 직접 추가하세요.";
+                : "상대 PC에서도 파란전화기가 실행 중이어야 합니다. 다른 대역이나 포트가 다른 PC는 IP 주소로 직접 추가하세요.";
             PeersEmptyBody.Visibility = searching ? Visibility.Collapsed : Visibility.Visible;
             HistoryEmpty.Visibility = _history.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -353,6 +353,13 @@ namespace BluePhone
             }
             Add("새 쪽지", () => Compose_Click(null, null), key: "Ctrl+N");
             Add("동료 다시 찾기", () => _core.Rescan());
+            Add("IP 주소로 동료 추가…", AddByAddress);
+            Add("내 주소 복사 (IP:포트)", () =>
+            {
+                var addr = string.Join(", ", SettingsWindow.LocalIps().Select(ip => $"{ip}:{_core.Settings.Port}"));
+                try { Clipboard.SetText(addr); } catch { }
+                Dialog.Alert(this, "내 주소를 복사했습니다", $"{addr}\n\n동료에게 알려 주면 ⋯ 메뉴 › IP 주소로 동료 추가에서 이 주소로 나를 추가할 수 있습니다.");
+            });
             Add("받은 파일 폴더 열기", () => _core.OpenDownloads());
             Add("모두 읽음 처리", _core.MarkAllRead);
             var theme = new MenuItem { Header = "테마" };
@@ -559,6 +566,36 @@ namespace BluePhone
         }
 
         void Rescan_Click(object sender, RoutedEventArgs e) => _core.Rescan();
+        void AddPeer_Click(object sender, RoutedEventArgs e) => AddByAddress();
+
+        async void AddByAddress()
+        {
+            var text = "";
+            while (true)
+            {
+                text = Dialog.Prompt(this, "IP 주소로 동료 추가",
+                    $"상대 PC의 IP 주소와 포트를 입력하세요.\n예) 192.168.0.10:9082 · 포트를 생략하면 내 포트({_core.Settings.Port})를 씁니다.\n상대 포트는 상대 프로그램의 설정 › 네트워크에서 볼 수 있습니다.",
+                    text, "추가");
+                if (string.IsNullOrWhiteSpace(text)) return;
+                try
+                {
+                    Cursor = System.Windows.Input.Cursors.Wait;
+                    var p = await _core.AddByAddress(text);
+                    Cursor = null;
+                    _peers.Refresh(); RefreshCounts();
+                    PeerList.SelectedItem = p;
+                    PeerList.ScrollIntoView(p);
+                    if (_core.IsBlocked(p.Id))
+                        Dialog.Alert(this, "동료 추가", $"{p.DisplayName}님은 차단한 동료입니다. ⋯ 메뉴 › 차단한 동료에서 해제하면 목록에 보입니다.");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Cursor = null;
+                    Dialog.Alert(this, "동료를 추가하지 못했습니다", ex.Message);
+                }
+            }
+        }
 
         void Compose_Click(object sender, RoutedEventArgs e) => _core.Compose(TabPeers.IsChecked == true ? SelectedPeers() : new Peer[0]);
 

@@ -61,12 +61,12 @@ namespace BluePhone
             var ver = typeof(SettingsWindow).Assembly.GetName().Version;
             VersionText.Text = "버전 " + AppInfo.VersionText;
             ExeText.Text = $"프로세스 이름  {Process.GetCurrentProcess().ProcessName}\n실행 파일  {Native.ExePath}";
-            MyIps.Text = "이 PC 주소  " + string.Join(", ", LocalIps());
+            MyIps.Text = "이 PC 주소  " + string.Join(", ", LocalIps().Select(ip => $"{ip}:{s.Port}")) + "  — 동료가 이 주소로 나를 추가할 수 있습니다";
 
             Loaded += (o, e) => NameBox.Focus();
         }
 
-        static string[] LocalIps()
+        internal static string[] LocalIps()
         {
             try
             {

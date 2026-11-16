@@ -206,13 +206,13 @@
                     <TextBlock Text="포트" VerticalAlignment="Center" Width="40" Foreground="{DynamicResource Ink2}"/>
                     <TextBox x:Name="PortBox" Style="{StaticResource Field}" Width="80" HorizontalAlignment="Left" HorizontalContentAlignment="Center"
                              PreviewTextInput="Digits_PreviewTextInput" MaxLength="5"/>
-                    <TextBlock Text="모든 PC가 같은 포트를 써야 합니다 (UDP·TCP)" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap"/>
+                    <TextBlock Text="자동 찾기는 같은 포트끼리만 됩니다. 포트가 다른 PC는 아래에 '주소:포트'로 추가하세요" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap"/>
                 </DockPanel>
                 <TextBlock Text="직접 추가할 PC" Style="{StaticResource Label}" Margin="0,16,0,6"/>
                 <TextBox x:Name="HostsBox" Style="{StaticResource Field}" AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="74"
                          VerticalContentAlignment="Top" Padding="9,7" FontFamily="Cascadia Mono, Consolas, Malgun Gothic" FontSize="12.5"
-                         Tag="한 줄에 하나씩 · 192.168.10.25 또는 PC 이름" VerticalScrollBarVisibility="Auto"/>
-                <TextBlock Text="라우터 너머 다른 대역처럼 자동으로 찾지 못하는 PC를 등록합니다" Style="{StaticResource Help}" Margin="0,6,0,0"/>
+                         Tag="한 줄에 하나씩 · 192.168.10.25:9082 (포트 생략 시 내 포트)" VerticalScrollBarVisibility="Auto"/>
+                <TextBlock Text="다른 대역 · 포트가 다른 PC · UDP 가 막힌 PC처럼 자동으로 찾지 못하는 PC를 등록합니다. 메인 창 ⋯ 메뉴 › IP 주소로 동료 추가로도 넣을 수 있습니다" Style="{StaticResource Help}" Margin="0,6,0,0"/>
                 <TextBlock x:Name="MyIps" Style="{StaticResource Help}" Margin="0,10,0,0"/>
 
                 <!-- about -->

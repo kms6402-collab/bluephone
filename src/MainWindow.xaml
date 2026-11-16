@@ -226,8 +226,11 @@
             <StackPanel Grid.Row="1" x:Name="PeersEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="32,0,32,40" Visibility="Collapsed">
                 <TextBlock x:Name="PeersEmptyTitle" Text="같은 네트워크의 동료를 찾는 중" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="PeersEmptyBody" TextWrapping="Wrap" TextAlignment="Center" Style="{StaticResource Caption}" Margin="0,6,0,14" LineHeight="18"
-                           Text="상대 PC에서도 파란전화기가 실행 중이어야 합니다. 다른 대역의 PC는 설정에서 IP를 직접 추가하세요."/>
-                <Button Style="{StaticResource Outline}" Content="다시 찾기" HorizontalAlignment="Center" Click="Rescan_Click"/>
+                           Text="상대 PC에서도 파란전화기가 실행 중이어야 합니다. 다른 대역이나 포트가 다른 PC는 IP 주소로 직접 추가하세요."/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button Style="{StaticResource Outline}" Content="다시 찾기" Click="Rescan_Click"/>
+                    <Button Style="{StaticResource Outline}" Content="IP 주소로 추가" Margin="8,0,0,0" Click="AddPeer_Click"/>
+                </StackPanel>
             </StackPanel>
         </Grid>
 

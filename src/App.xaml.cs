@@ -228,6 +228,7 @@ namespace BluePhone
             _updateTimer.Start();
 
             Net.Announce(wantReply: true);
+            PingManualHosts();
             _lastAnnounce = DateTime.Now;
             _tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _tick.Tick += (s, e) => Tick();
@@ -307,6 +308,7 @@ namespace BluePhone
             if ((DateTime.Now - _lastAnnounce).TotalSeconds >= 25)
             {
                 Net.Announce(wantReply: false);
+                PingManualHosts();
                 _lastAnnounce = DateTime.Now;
             }
 
@@ -423,7 +425,78 @@ namespace BluePhone
             StatusChanged?.Invoke();
         }
 
-        public void Rescan() { Net.Announce(true); _lastAnnounce = DateTime.Now; }
+        public void Rescan() { Net.Announce(true); PingManualHosts(); _lastAnnounce = DateTime.Now; }
+
+        /// <summary>
+        /// 직접 추가한 PC 에 TCP 로 접속 알림 → UDP 가 막힌 환경이나 포트가 다른 PC도 접속 상태가 유지됨
+        /// (상대도 이 알림으로 나를 목록에 올리고 접속 상태를 갱신)
+        /// </summary>
+        void PingManualHosts()
+        {
+            foreach (var h in Settings.ManualHosts.ToList())
+            {
+                var host = h;
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        var (r, ep) = await Net.Probe(host, Settings.Port, 3000).ConfigureAwait(false);
+                        if (r != null && NetService.Str(r, "id") != Settings.Id)
+                            UI.BeginInvoke(new Action(() => OnHello(r, ep.Address)));
+                    }
+                    catch { }
+                });
+            }
+        }
+
+        /// <summary>
+        /// IP 주소(또는 PC 이름)와 포트로 동료 추가. 예) 192.168.0.10, 192.168.0.10:9100
+        /// 포트를 생략하면 내 포트를 씀. 성공하면 '직접 추가할 PC' 목록에도 저장해 계속 연결을 유지
+        /// </summary>
+        public async Task<Peer> AddByAddress(string text)
+        {
+            text = (text ?? "").Trim();
+            if (!NetService.TrySplit(text, out var host, out var port, Settings.Port))
+                throw new ArgumentException("주소 형식이 올바르지 않습니다.\n예) 192.168.0.10 또는 192.168.0.10:9082");
+            var addr = $"{host}:{port}";
+            Packet r; System.Net.IPEndPoint ep;
+            try { (r, ep) = await Net.Probe(addr, Settings.Port); }
+            catch (ArgumentException) { throw new ArgumentException($"'{host}' 주소를 찾을 수 없습니다."); }
+            catch
+            {
+                throw new System.IO.IOException($"{addr} 에 연결할 수 없습니다.\n\n· 상대 PC에서 파란전화기가 실행 중인지\n· 포트 번호가 상대 프로그램의 설정 › 네트워크 › 포트와 같은지\n· 상대 PC 방화벽에서 이 포트(TCP)가 허용되어 있는지 확인해 주세요.");
+            }
+
+            Peer p = null;
+            if (r != null)
+            {
+                var id = NetService.Str(r, "id");
+                if (id == Settings.Id) throw new InvalidOperationException("내 PC의 주소입니다.");
+                OnHello(r, ep.Address);
+                p = Peers.FirstOrDefault(x => x.Id == id);
+            }
+            else
+            {
+                // 상대가 구버전(TCP 접속 알림 미지원) → UDP 로 한 번 더 시도
+                Net.AnnounceTo(ep, true);
+                var ip = ep.Address.ToString();
+                for (int i = 0; i < 15 && p == null; i++)
+                {
+                    await Task.Delay(200);
+                    p = Peers.FirstOrDefault(x => x.Ip == ip && x.Port == ep.Port && x.IsOnline);
+                }
+                if (p == null)
+                    throw new System.IO.IOException($"{addr} 에 연결은 되었지만 응답이 없습니다.\n상대 PC의 파란전화기를 최신 버전으로 업데이트해 주세요.");
+            }
+
+            if (!Settings.ManualHosts.Any(x => string.Equals(x.Trim(), addr, StringComparison.OrdinalIgnoreCase)
+                                             || (port == Settings.Port && string.Equals(x.Trim(), host, StringComparison.OrdinalIgnoreCase))))
+            {
+                Settings.ManualHosts.Add(port == Settings.Port ? host : addr);
+                Store.SaveSettings(Settings);
+            }
+            return p;
+        }
 
         // ───────────────────────── peers ─────────────────────────
 
@@ -491,6 +564,15 @@ namespace BluePhone
         {
             Peers.Remove(p);
             Store.SaveContacts(Peers);
+            // 직접 추가한 주소였다면 함께 지워야 다시 나타나지 않음
+            int before = Settings.ManualHosts.Count;
+            Settings.ManualHosts.RemoveAll(h =>
+            {
+                if (!NetService.TrySplit(h, out var host, out var port, Settings.Port)) return false;
+                return port == p.Port && (string.Equals(host, p.Ip, StringComparison.OrdinalIgnoreCase)
+                                          || string.Equals(host, p.Host, StringComparison.OrdinalIgnoreCase));
+            });
+            if (Settings.ManualHosts.Count != before) Store.SaveSettings(Settings);
         }
 
         // ───────────────────────── messaging ─────────────────────────
