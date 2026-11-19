@@ -99,7 +99,7 @@
                             </ContextMenu>
                         </Border.ContextMenu>
                         <StackPanel>
-                            <TextBlock x:Name="txt" local:Emoji.Text="{Binding Text}" TextWrapping="Wrap"
+                            <local:SelectableTextBlock x:Name="txt" local:Emoji.Text="{Binding Text}" TextWrapping="Wrap"
                                        FontSize="{DynamicResource Ct.Size}" FontFamily="{DynamicResource Ct.Font}"
                                        Visibility="{Binding Text, Converter={StaticResource Vis}}"/>
                             <ContentControl x:Name="md" Visibility="Collapsed" Focusable="False" IsTabStop="False"

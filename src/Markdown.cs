@@ -154,13 +154,13 @@ namespace BluePhone
 
         static TextBlock Paragraph(string text)
         {
-            var tb = new TextBlock { TextWrapping = TextWrapping.Wrap };
+            var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap };
             AddInlines(tb.Inlines, text);
             return tb;
         }
 
         static readonly Regex InlineRx = new Regex(
-            @"(?<code>`[^`\n]+`)|(?<bold>\*\*(?=\S)[^*\n]+?(?<=\S)\*\*)|(?<strike>~~(?=\S)[^~\n]+?(?<=\S)~~)|(?<!\w)(?<ital>\*(?=[^\s*])[^*\n]+?(?<=[^\s*])\*)(?!\w)|(?<link>\[[^\]\n]+\]\([^)\s]+\))|(?<url>https?://[^\s<>()]+[^\s<>().,;:!?'""])",
+            @"(?<code>`[^`\n]+`)|(?<bold>\*\*(?=\S)[^*\n]+?(?<=\S)\*\*)|(?<strike>~~(?=\S)[^~\n]+?(?<=\S)~~)|(?<!\w)(?<ital>\*(?=[^\s*])[^*\n]+?(?<=[^\s*])\*)(?!\w)|(?<link>\[[^\]\n]+\]\([^)\s]+\))|(?<url>(?:https?://|www\.)[^\s<>()]+[^\s<>().,;:!?'""])",
             RegexOptions.Compiled);
 
         static void AddInlines(InlineCollection target, string text)
@@ -209,18 +209,59 @@ namespace BluePhone
             foreach (var (t, e) in Emoji.Split(text))
             {
                 if (e == null) { target.Add(new Run(t)); continue; }
-                var img = new Image { Source = Emoji.Image(e), Width = 18, Height = 18, Margin = new Thickness(1, 0, 1, 0) };
+                var img = new Image { Source = Emoji.Image(e), Width = 18, Height = 18, Margin = new Thickness(1, 0, 1, 0), Tag = e.Text };
                 RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
                 target.Add(new InlineUIContainer(img) { BaselineAlignment = BaselineAlignment.Center });
             }
         }
 
+        static readonly Regex UrlRx = new Regex(@"(?:https?://|www\.)[^\s<>()""']+[^\s<>().,;:!?'""\]]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        /// <summary>일반 글자 안의 주소(http · https · www.)를 눌러 열 수 있는 링크로</summary>
+        public static void AddLinked(InlineCollection target, string text)
+        {
+            int pos = 0;
+            foreach (Match m in UrlRx.Matches(text ?? ""))
+            {
+                if (m.Index > pos) target.Add(new Run(text.Substring(pos, m.Index - pos)));
+                target.Add(Link(m.Value, m.Value));
+                pos = m.Index + m.Length;
+            }
+            if (pos < (text ?? "").Length) target.Add(new Run(text.Substring(pos)));
+        }
+
+        static DateTime _lastOpen;
+        static string _lastUrl;
+
+        /// <summary>링크 열기 (기본 브라우저). 한 번 누를 때 두 번 열리지 않도록</summary>
+        public static void OpenUrl(string url)
+        {
+            if (url == _lastUrl && (DateTime.Now - _lastOpen).TotalMilliseconds < 800) return;
+            _lastUrl = url; _lastOpen = DateTime.Now;
+            var log = Environment.GetEnvironmentVariable("BLUEPHONE_OPENLOG");   // 테스트용: 실제로 열지 않고 기록
+            if (!string.IsNullOrEmpty(log)) { try { System.IO.File.AppendAllText(log, url + Environment.NewLine); } catch { } return; }
+            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+        }
+
         static Inline Link(string text, string url)
         {
+            if (url.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) url = "http://" + url;
             if (!Regex.IsMatch(url, @"^(https?|mailto):", RegexOptions.IgnoreCase)) return new Run(text);   // 파일 실행 등 위험한 주소는 링크로 만들지 않음
-            var h = new Hyperlink(new Run(text)) { ToolTip = url, Foreground = null };
+            var h = new Hyperlink(new Run(text)) { ToolTip = url + " — 누르면 브라우저에서 엽니다", Foreground = null, Tag = url, Cursor = Cursors.Hand };
             h.SetResourceReference(TextElement.ForegroundProperty, "Accent");
-            h.Click += (s, e) => { try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { } };
+            h.Click += (s, e) => OpenUrl(url);
+            // 글자가 밝은 곳(내가 보낸 파란 말풍선 · 어두운 테마)에서는 강조색 대신 글자색 + 밑줄로 (안 보이는 문제 방지)
+            h.Loaded += (s, e) =>
+            {
+                DependencyObject d = h;
+                while (d != null && !(d is TextBlock)) d = (d as FrameworkContentElement)?.Parent ?? LogicalTreeHelper.GetParent(d);
+                if (d is TextBlock tb && tb.Foreground is SolidColorBrush b)
+                {
+                    var c = b.Color;
+                    if ((0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255 > 0.6)
+                        h.SetBinding(TextElement.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = tb });
+                }
+            };
             return h;
         }
 

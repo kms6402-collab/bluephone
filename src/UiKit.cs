@@ -152,7 +152,7 @@ namespace BluePhone
                 mi.Click += (s, e) => a();
                 m.Items.Add(mi);
             }
-            Add("파란전화기 열기", core.ShowMain, bold: true);
+            Add(AppInfo.Name + " 열기", core.ShowMain, bold: true);
             Add("새 쪽지", () => core.Compose(new Peer[0]));
             if (core.Unread > 0) Add($"모두 읽음 처리 ({core.Unread})", core.MarkAllRead);
             Add("화면 캡처해서 보내기", () => core.StartCapture());

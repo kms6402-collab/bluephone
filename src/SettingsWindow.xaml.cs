@@ -60,6 +60,7 @@ namespace BluePhone
             AutoStartHelp.Text = $"현재 실행 파일({Path.GetFileName(Native.ExePath)})을 등록합니다. 파일 이름이나 위치를 바꾼 뒤에는 한 번 실행하면 자동으로 갱신됩니다.";
             var ver = typeof(SettingsWindow).Assembly.GetName().Version;
             VersionText.Text = "버전 " + AppInfo.VersionText;
+            AppNameText.Text = AppInfo.Name;
             ExeText.Text = $"프로세스 이름  {Process.GetCurrentProcess().ProcessName}\n실행 파일  {Native.ExePath}";
             MyIps.Text = "이 PC 주소  " + string.Join(", ", LocalIps().Select(ip => $"{ip}:{s.Port}")) + "  — 동료가 이 주소로 나를 추가할 수 있습니다";
 
@@ -87,10 +88,41 @@ namespace BluePhone
         // ───────────── telegram ─────────────
 
         System.Threading.CancellationTokenSource _pairing;
+        /// <summary>마지막 연결 실패 이유 (다시 시도하기 전까지 계속 표시)</summary>
+        string _tgError;
+
+        /// <summary>붙여 넣은 글에서 봇 토큰만 골라냄 (BotFather 안내문을 통째로 붙여 넣어도 됨)</summary>
+        static string ExtractToken(string text)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(text ?? "", @"\d{5,}:[A-Za-z0-9_-]{30,}");
+            return m.Success ? m.Value : (text ?? "").Trim();
+        }
+
+        static string Explain(Exception ex)
+        {
+            if (ex is TelegramException te)
+            {
+                if (te.Code == 401 || te.Code == 404) return "봇 토큰이 올바르지 않습니다. @BotFather 에서 받은 토큰을 다시 복사해 붙여 넣어 주세요.";
+                if (te.Code == 409) return "이 봇을 다른 PC(또는 웹훅)에서 쓰고 있습니다. 다른 PC의 연결을 해제한 뒤 다시 시도해 주세요.";
+                return $"텔레그램 오류 ({te.Code}): {te.Message}";
+            }
+            if (ex is TimeoutException) return ex.Message.Contains("코드") ? ex.Message + " 다시 '연결'을 눌러 주세요." : "텔레그램 서버의 응답이 없습니다. 인터넷 · 회사 방화벽(api.telegram.org)을 확인해 주세요.";
+            var w = ex as System.Net.WebException ?? ex.InnerException as System.Net.WebException;
+            if (w != null)
+            {
+                if (w.Status == System.Net.WebExceptionStatus.NameResolutionFailure || w.Status == System.Net.WebExceptionStatus.ConnectFailure)
+                    return "텔레그램 서버(api.telegram.org)에 연결할 수 없습니다. 인터넷 연결이나 회사 방화벽 · 프록시 설정을 확인해 주세요. (" + w.Status + ")";
+                if (w.Status == System.Net.WebExceptionStatus.TrustFailure || w.Status == System.Net.WebExceptionStatus.SecureChannelFailure)
+                    return "보안 연결(HTTPS)을 만들지 못했습니다. 회사 보안 프로그램이 텔레그램을 막고 있을 수 있습니다. (" + w.Status + ")";
+                return "텔레그램에 연결하지 못했습니다: " + w.Message + " (" + w.Status + ")";
+            }
+            return "연결하지 못했습니다: " + ex.Message;
+        }
 
         void RefreshTg()
         {
             if (_pairing != null) return;
+            if (_tgError != null) { TgStatus.Text = _tgError; return; }
             var s = _core.Settings;
             bool linked = !string.IsNullOrWhiteSpace(s.TelegramToken) && s.TelegramChatId != 0;
             TgTestBtn.Visibility = TgUnlinkBtn.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
@@ -105,9 +137,12 @@ namespace BluePhone
         async void TgConnect_Click(object sender, RoutedEventArgs e)
         {
             if (_pairing != null) { _pairing.Cancel(); return; }
-            var token = TgTokenBox.Text.Trim();
+            _tgError = null;
+            var token = ExtractToken(TgTokenBox.Text);
+            TgTokenBox.Text = token;
             if (token.Length == 0 || !token.Contains(":"))
             {
+                TgStatus.Text = "봇 토큰 형식이 아닙니다. 예) 123456789:ABCdef…";
                 Dialog.Alert(this, "봇 토큰을 확인해 주세요", "텔레그램 @BotFather 에서 /newbot 으로 봇을 만들면 '123456789:ABC…' 형식의 토큰을 받을 수 있습니다.");
                 TgTokenBox.Focus();
                 return;
@@ -140,10 +175,10 @@ namespace BluePhone
             catch (Exception ex)
             {
                 _pairing = null;
-                RefreshTg();
-                if (!cts.IsCancellationRequested)
-                    TgStatus.Text = "연결하지 못했습니다: " + (ex is TelegramException te && (te.Code == 401 || te.Code == 404) ? "봇 토큰이 올바르지 않습니다." : ex.Message);
+                // 실패 이유는 다시 시도할 때까지 남겨 둠 (상태 갱신이 덮어쓰지 않도록)
+                _tgError = cts.IsCancellationRequested ? null : "⚠️ " + Explain(ex);
                 _core.Telegram?.Apply();
+                RefreshTg();
             }
             finally { if (_pairing == null) TgConnectBtn.Content = _core.Telegram?.Connected == true ? "다시 연결" : "연결"; }
         }
@@ -306,7 +341,7 @@ namespace BluePhone
             s.DownloadDir = DirBox.Text.Trim();
             s.Port = port;
             s.AutoUpdate = AutoUpdateChk.IsChecked == true;
-            var tgToken = TgTokenBox.Text.Trim();
+            var tgToken = ExtractToken(TgTokenBox.Text);
             if (tgToken != (s.TelegramToken ?? "").Trim()) { s.TelegramToken = tgToken; s.TelegramChatId = 0; s.TelegramWho = ""; }
             s.TelegramEnabled = TgChk.IsChecked == true;
             s.TelegramNotes = TgNotesChk.IsChecked == true;

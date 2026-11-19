@@ -355,6 +355,9 @@ namespace BluePhone
         void Copy_Click(object sender, RoutedEventArgs e)
         {
             var m = MsgOf(sender);
+            // 말풍선에서 일부를 골라 두었으면 그 부분만, 아니면 메시지 전체
+            var part = SelectableTextBlock.SelectionIn(this);
+            if (!string.IsNullOrEmpty(part)) { try { Clipboard.SetText(part); } catch { } return; }
             if (m != null) try { Clipboard.SetText(m.Text ?? ""); } catch { }
         }
 

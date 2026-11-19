@@ -54,7 +54,16 @@ namespace BluePhone
             Avatar.Fill = m.AvatarBrush;
             Body.Text = m.Text;
             _md = Markdown.HasMarkup(m.Text);
-            if (_md) { MdBody.Content = Markdown.Render(m.Text); SetBody(Visibility.Visible); }
+            // 본문: 마우스로 일부를 골라 복사할 수 있고, 주소(URL)는 눌러서 바로 열림
+            if (_md) MdBody.Content = Markdown.Render(m.Text);
+            else
+            {
+                var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap };
+                Emoji.SetText(tb, m.Text);
+                MdBody.Content = tb;
+            }
+            _md = true;
+            SetBody(Visibility.Visible);
             RefreshHeader();
             core.PeerRenamed += OnPeerRenamed;
             Closed += (s, e) => core.PeerRenamed -= OnPeerRenamed;
@@ -325,7 +334,8 @@ namespace BluePhone
         void Copy_Click(object sender, RoutedEventArgs e)
         {
             Reveal();
-            try { Clipboard.SetText(Message.Text ?? ""); Footnote.Text = "복사했습니다"; } catch { }
+            var part = SelectableTextBlock.SelectionIn(this);
+            try { Clipboard.SetText(string.IsNullOrEmpty(part) ? Message.Text ?? "" : part); Footnote.Text = string.IsNullOrEmpty(part) ? "복사했습니다" : "선택한 부분을 복사했습니다"; } catch { }
         }
 
         // ───────────── reply ─────────────

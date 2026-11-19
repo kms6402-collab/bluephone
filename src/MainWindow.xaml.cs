@@ -21,7 +21,7 @@ namespace BluePhone
         public MainWindow(Core core)
         {
             _core = core;
-            InitializeComponent();
+            InitializeComponent(); AppNameText.Text = AppInfo.Name; Title = AppInfo.Name;
             Chrome.Apply(this);
 
             var s = core.Settings;

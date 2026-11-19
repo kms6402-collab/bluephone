@@ -1097,7 +1097,7 @@ namespace BluePhone
             int sz = WinForms.SystemInformation.SmallIconSize.Width;
             _iconNormal = Native.LoadIcon(sz);
             _iconDot = Native.IconWithDot(sz);
-            _tray = new WinForms.NotifyIcon { Icon = _iconNormal, Visible = true, Text = "파란전화기" };
+            _tray = new WinForms.NotifyIcon { Icon = _iconNormal, Visible = true, Text = AppInfo.Name.Length > 60 ? AppInfo.Name.Substring(0, 60) : AppInfo.Name };
             _tray.MouseClick += (s, e) =>
             {
                 if (e.Button == WinForms.MouseButtons.Left) UI.BeginInvoke(new Action(OnTrayClick));
@@ -1129,7 +1129,7 @@ namespace BluePhone
             if (_tray == null) return;
             int n = Unread;
             _tray.Icon = n > 0 ? _iconDot : _iconNormal;
-            var text = $"파란전화기 {AppInfo.VersionText} — {Status.Label(_status)}";
+            var text = $"{AppInfo.Name} {AppInfo.VersionText} — {Status.Label(_status)}";
             if (n > 0) text += $"\n안 읽은 쪽지 {n}개";
             _tray.Text = text.Length > 63 ? text.Substring(0, 63) : text;
         }

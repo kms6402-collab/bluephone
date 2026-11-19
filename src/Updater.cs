@@ -17,6 +17,20 @@ namespace BluePhone
     {
         public const string Repo = "kms6402-collab/bluephone";
         public static readonly Version Version = Normalize(Assembly.GetExecutingAssembly().GetName().Version);
+        /// <summary>화면에 보이는 프로그램 이름 = 실행 파일 이름 (파일 이름을 바꾸면 함께 바뀜)</summary>
+        public static string Name
+        {
+            get
+            {
+                if (_name == null)
+                {
+                    try { _name = System.IO.Path.GetFileNameWithoutExtension(Native.ExePath); } catch { }
+                    if (string.IsNullOrWhiteSpace(_name)) _name = "파란전화기";
+                }
+                return _name;
+            }
+        }
+        static string _name;
         public static string VersionText => $"{Version.Major}.{Version.Minor}.{Version.Build}";
         public static string RepoUrl => "https://github.com/" + Repo;
 

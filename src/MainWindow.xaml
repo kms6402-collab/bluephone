@@ -118,7 +118,7 @@
             </StackPanel>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Margin="14,0,0,0" VerticalAlignment="Center">
                 <ContentControl ContentTemplate="{StaticResource LogoMark}" Focusable="False"/>
-                <TextBlock Text="파란전화기" FontWeight="SemiBold" Margin="9,0,0,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="AppNameText" Text="파란전화기" FontWeight="SemiBold" Margin="9,0,0,0" VerticalAlignment="Center"/>
                 <TextBlock x:Name="VersionLabel" Foreground="{DynamicResource Faint}" FontSize="11.5" Margin="7,1,0,0" VerticalAlignment="Center"/>
                 <Border x:Name="UpdateBadge" Background="{DynamicResource Accent}" CornerRadius="10" Padding="8,2,9,2" Margin="8,0,0,0" VerticalAlignment="Center"
                         Visibility="Collapsed" Cursor="Hand" WindowChrome.IsHitTestVisibleInChrome="True" MouseLeftButtonUp="UpdateBadge_Click">

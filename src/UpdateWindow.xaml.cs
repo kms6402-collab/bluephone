@@ -19,7 +19,7 @@ namespace BluePhone
         {
             _core = core;
             _release = r;
-            InitializeComponent();
+            InitializeComponent(); AppNameText.Text = AppInfo.Name;
             Chrome.Apply(this, caption: 40, resizable: false);
             Notes.Text = Updater.PlainNotes(r.Notes);
             if (string.IsNullOrWhiteSpace(Notes.Text)) Notes.Text = "변경 사항이 등록되지 않았습니다.";
@@ -31,7 +31,7 @@ namespace BluePhone
         public UpdateWindow(Core core, string version, string notes)
         {
             _core = core;
-            InitializeComponent();
+            InitializeComponent(); AppNameText.Text = AppInfo.Name;
             Chrome.Apply(this, caption: 40, resizable: false);
             Notes.Text = Updater.PlainNotes(notes);
             Heading.Text = $"{version} 버전으로 업데이트했습니다";

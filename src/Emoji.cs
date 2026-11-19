@@ -119,8 +119,8 @@ namespace BluePhone
             bool jumbo = emojiCount > 0 && emojiCount <= 3 && parts.All(p => p.emoji != null || string.IsNullOrWhiteSpace(p.text));
             foreach (var (text, emoji) in parts)
             {
-                if (emoji == null) { tb.Inlines.Add(new Run(text)); continue; }
-                var img = new Image { Source = Image(emoji), ToolTip = null, SnapsToDevicePixels = true };
+                if (emoji == null) { Markdown.AddLinked(tb.Inlines, text); continue; }
+                var img = new Image { Source = Image(emoji), ToolTip = null, SnapsToDevicePixels = true, Tag = emoji.Text };
                 RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
                 if (jumbo) { img.Width = img.Height = 40; img.Margin = new Thickness(1, 2, 1, 2); }
                 else
