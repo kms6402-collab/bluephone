@@ -17,7 +17,7 @@ namespace BluePhone
     ///  · 텔레그램에서 명령어(/msg, /chat …)나 '답장'으로 동료에게 바로 보내기
     /// 내가 연결한 텔레그램 대화(ChatId)에서 온 명령만 처리함
     /// </summary>
-    public sealed class TelegramBridge
+    public sealed partial class TelegramBridge
     {
         readonly Core _core;
         CancellationTokenSource _cts;
@@ -106,7 +106,7 @@ namespace BluePhone
                     var args = new Dictionary<string, string>
                     {
                         ["timeout"] = "25",
-                        ["allowed_updates"] = "[\"message\"]",
+                        ["allowed_updates"] = "[\"message\",\"callback_query\"]",
                     };
                     // 시작할 때 이미 쌓여 있던(꺼져 있는 동안 보낸) 명령은 실행하지 않음
                     if (first) args["offset"] = "-1";
@@ -116,7 +116,10 @@ namespace BluePhone
                     {
                         var id = Long(u, "update_id");
                         if (id >= _offset) _offset = id + 1;
-                        if (!first) await Handle(token, Obj(u, "message")).ConfigureAwait(false);
+                        if (first) continue;
+                        var cb = Obj(u, "callback_query");
+                        if (cb != null) await HandleCallback(token, cb).ConfigureAwait(false);
+                        else await Handle(token, Obj(u, "message")).ConfigureAwait(false);
                     }
                     if (first) _ = SetCommands(token, ct);
                     first = false;
@@ -216,7 +219,8 @@ namespace BluePhone
         /// <summary>(명령, 별칭, 텔레그램 메뉴 설명, 도움말 한 줄)</summary>
         static readonly (string cmd, string[] alias, string menu, string help)[] Commands =
         {
-            ("help",      new[] { "start", "도움말", "h" },        "모든 명령어 보기",                 "/help — 이 도움말"),
+            ("menu",      new[] { "start", "메뉴", "m0" },          "📋 메뉴 열기 (버튼으로 진행)",     "/menu — 버튼 메뉴 열기 (명령어 없이 버튼으로 진행)"),
+            ("help",      new[] { "도움말", "h" },                 "모든 명령어 보기",                 "/help — 이 도움말"),
             ("list",      new[] { "l", "목록", "동료" },            "동료 목록 (검색어 가능)",          "/list [검색어] — 동료 목록 (번호로 고르기)"),
             ("info",      new[] { "정보", "who" },                 "동료 정보  /info 이름",            "/info 이름 — 동료 상태 · 부서 · 주소"),
             ("msg",       new[] { "m", "쪽지" },                   "쪽지 보내기  /msg 이름 내용",      "/msg 이름 내용 — 쪽지 보내기"),
@@ -245,10 +249,12 @@ namespace BluePhone
 
         static string HelpText =>
             "받은 쪽지 · 대화 · 파일이 여기로 옵니다.\n" +
+            "📋 아래 '메뉴' 버튼(또는 /menu)을 누르면 명령어 없이 버튼만 눌러 보낼 수 있습니다.\n" +
+            "✍️ 그냥 글을 쓰면 받을 동료를 목록에서 고르게 됩니다.\n" +
             "↩ 받은 메시지에 '답장'하면 그 동료에게 바로 보냅니다.\n" +
             "📎 사진 · 파일은 답장으로 보내거나 설명에 /msg 이름 을 적으세요.\n\n" +
             string.Join("\n", Commands.Where(c => c.help != null).Select(c => "• " + c.help)) +
-            "\n\n이름 대신 /list 의 번호를 써도 됩니다. 예) /msg 2 회의 10분 늦습니다";
+            "\n\n명령어로도 할 수 있습니다. 이름 대신 /list 의 번호를 써도 됩니다. 예) /msg 2 회의 10분 늦습니다";
 
         /// <summary>텔레그램 명령어 메뉴 등록</summary>
         static async Task SetCommands(string token, CancellationToken ct)
@@ -262,7 +268,13 @@ namespace BluePhone
         public static async Task Welcome(string token, long chatId, string myName, CancellationToken ct)
         {
             await SetCommands(token, ct).ConfigureAwait(false);
-            await SendTo(token, chatId, $"✅ {AppInfo.Name}({myName})와 연결되었습니다.\n\n" + HelpText, ct).ConfigureAwait(false);
+            await Call(token, "sendMessage", new Dictionary<string, string>
+            {
+                ["chat_id"] = chatId.ToString(),
+                ["text"] = $"✅ {AppInfo.Name}({myName})와 연결되었습니다.\n\n" + HelpText,
+                ["disable_web_page_preview"] = "true",
+                ["reply_markup"] = ReplyKeyboard,
+            }, 20000, ct).ConfigureAwait(false);
         }
 
         // ───────────────────────── 알림 보내기 ─────────────────────────
@@ -304,7 +316,7 @@ namespace BluePhone
                 }
             }
             else sb.Append("\n(내용은 PC에서 확인하세요)");
-            if (!m.Broadcast && !m.Auto) sb.Append("\n<i>↩ 답장하면 ").Append(m.Chat ? "대화로" : "쪽지로").Append(" 보냅니다</i>");
+            if (!m.Broadcast && !m.Auto) sb.Append("\n<i>↩ 아래 버튼이나 '답장'으로 바로 보낼 수 있습니다</i>");
 
             var token = S.TelegramToken.Trim();
             var chatId = S.TelegramChatId;
@@ -317,9 +329,10 @@ namespace BluePhone
                          .Select(f => (f.Name, f.Size, f.Token, local: Media.Exists(f.LocalPath) ? f.LocalPath : null)).ToList()
                 : new List<(string Name, long Size, string Token, string local)>();
             var ip = m.PeerIp; var port = m.PeerPort;
+            var canReply = !m.Broadcast && !m.Auto;
             return Task.Run(async () =>
             {
-                long head = await SendHead(token, chatId, html, key).ConfigureAwait(false);
+                long head = await SendHead(token, chatId, html, key, canReply).ConfigureAwait(false);
                 if (head == 0 && files.Count == 0) return;
                 foreach (var f in files) await SendFile(token, chatId, f.Name, f.Size, f.Token, f.local, ip, port, head, key).ConfigureAwait(false);
             });
@@ -328,7 +341,7 @@ namespace BluePhone
         /// <summary>텔레그램에 올릴 수 있는 파일 크기 (Bot API 한도 50MB)</summary>
         const long MaxUpload = 50L * 1024 * 1024;
 
-        async Task<long> SendHead(string token, long chatId, string html, (string, bool, string) key)
+        async Task<long> SendHead(string token, long chatId, string html, (string, bool, string) key, bool canReply = true)
         {
                 for (int i = 0; i < 3; i++)
                 {
@@ -340,6 +353,7 @@ namespace BluePhone
                             ["text"] = html,
                             ["parse_mode"] = "HTML",
                             ["disable_web_page_preview"] = "true",
+                            ["reply_markup"] = AlertButtons(canReply),
                         }, 20000, CancellationToken.None).ConfigureAwait(false);
                         var mid = Long(r, "message_id");
                         if (mid != 0) lock (_sent) Remember(mid, key);
@@ -427,13 +441,6 @@ namespace BluePhone
                 await Reply(token, chatId, "글자 · 사진 · 파일만 보낼 수 있습니다.");
                 return;
             }
-            if (att != null && replyTo == null && !text.StartsWith("/"))
-            {
-                await Reply(token, chatId, "사진 · 파일은 받은 메시지에 '답장'으로 보내거나, 설명(캡션)에 '/msg 이름' 또는 '/chat 이름' 을 적어 주세요.");
-                return;
-            }
-
-            string answer;
             try
             {
                 List<string> files = null;
@@ -442,11 +449,36 @@ namespace BluePhone
                     if (att.Value.size > 20L * 1024 * 1024) throw new InvalidOperationException("텔레그램에서 보내는 파일은 20MB 까지 전달할 수 있습니다.");
                     files = new List<string> { await Fetch(token, att.Value.id, att.Value.name).ConfigureAwait(false) };
                 }
-                answer = await Run(text, replyTo, files);
+                Screen scr;
+                var word = CommandWord(text);
+                bool known = false;
+                if (replyTo != null && !text.StartsWith("/")) lock (_sent) known = _sent.ContainsKey(Long(replyTo, "message_id"));
+                if (word == "menu") { _pend = null; _draft = null; scr = await Ui(MainMenu); }
+                else if (text.StartsWith("/") || known)
+                {
+                    if (text.StartsWith("/")) { _pend = null; _draft = null; }
+                    var answer = await Run(text, replyTo, files);
+                    scr = answer == null ? null : answer.StartsWith(PickerMark) ? await Ui(() => Picker(answer.Substring(PickerMark.Length), 0))
+                                                 : answer.StartsWith(AskMark) ? new Screen(Esc(answer.Substring(AskMark.Length)), new[] { BtnCancel })
+                                                 : Done(answer);
+                }
+                else scr = await OnText(text, files);
+                if (scr != null) await Show(token, chatId, 0, scr);
             }
-            catch (Exception ex) { answer = "⚠️ " + ex.Message; }
-            if (!string.IsNullOrEmpty(answer)) await Reply(token, chatId, answer);
+            catch (Exception ex) { await Reply(token, chatId, "⚠️ " + ex.Message); }
         }
+
+        /// <summary>"/msg@Bot 홍길동" → "msg" (명령 별칭은 원래 이름으로)</summary>
+        static string CommandWord(string text)
+        {
+            if (!text.StartsWith("/")) return null;
+            var sp = text.IndexOfAny(new[] { ' ', '\n' });
+            var w = (sp < 0 ? text : text.Substring(0, sp)).Substring(1).ToLowerInvariant();
+            var at = w.IndexOf('@'); if (at > 0) w = w.Substring(0, at);
+            return Commands.FirstOrDefault(c => c.cmd == w || c.alias.Contains(w)).cmd;
+        }
+
+        const string PickerMark = "\u0001pick:", AskMark = "\u0001ask:";
 
         async Task Reply(string token, long chatId, string text)
         {
@@ -499,7 +531,7 @@ namespace BluePhone
             }
 
             if (!text.StartsWith("/"))
-                return "명령어를 알 수 없습니다. 받은 메시지에 '답장'하거나, /r 내용 으로 마지막 메시지에 답장하거나, /help 를 보내 보세요.";
+                return "명령어를 알 수 없습니다. /menu 로 메뉴를 열어 보세요.";
 
             var sp = text.IndexOfAny(new[] { ' ', '\n' });
             var word = (sp < 0 ? text : text.Substring(0, sp)).Substring(1).ToLowerInvariant();
@@ -510,12 +542,14 @@ namespace BluePhone
             switch (cmd)
             {
                 case "help": return HelpText;
+                case "menu": return null;
                 case "list": return await OnUi(() => ListPeers(rest));
                 case "info": return await OnUi(() => Info(rest));
                 case "msg":
                 case "chat":
                 case "urgent":
-                    if (rest.Length == 0) return $"사용법: /{cmd} 이름 내용";
+                    _pickFilter = null;
+                    if (rest.Length == 0) return PickerMark + (cmd == "chat" ? "chat" : cmd == "urgent" ? "urg" : "msg");
                     return await OnUi(() => SendCommand(rest, cmd == "chat", files, urgent: cmd == "urgent"));
                 case "r":
                 {
@@ -558,7 +592,7 @@ namespace BluePhone
                 case "unblock": return await OnUi(() => Block(rest, cmd == "block"));
                 case "me": return await OnUi(Me);
                 default:
-                    return "알 수 없는 명령어입니다. /help 를 보내 보세요.";
+                    return "알 수 없는 명령어입니다. /menu 로 메뉴를 열거나 /help 를 보내 보세요.";
             }
         }
 
@@ -652,7 +686,11 @@ namespace BluePhone
             var err = Resolve(rest, usage, out var target, out var body);
             if (err != null) return Task.FromResult(err);
             if (body.Length == 0 && (files == null || files.Count == 0))
-                return Task.FromResult($"{target.DisplayName}님에게 보낼 내용을 함께 적어 주세요.\n예) {usage.Split(' ')[0]} {target.DisplayName} 안녕하세요");
+            {
+                // 이름만 적으면 다음에 입력하는 글을 보냄
+                _pend = new Pend { Act = urgent ? "urg" : chat ? "chat" : "msg", Peer = target.Id };
+                return Task.FromResult(AskMark + $"{target.DisplayName}님에게 보낼 내용을 입력하세요.");
+            }
             return SendFromTelegram(target.Id, target, body, chat, null, files, urgent);
         }
 
@@ -844,6 +882,11 @@ namespace BluePhone
         {
             var err = Resolve(rest, "/info 이름", out var p, out _);
             if (err != null) return err;
+            return InfoOf(p);
+        }
+
+        string InfoOf(Peer p)
+        {
             var sb = new StringBuilder($"{Dot(p)} {p.DisplayName}");
             if (!string.IsNullOrEmpty(p.Dept)) sb.Append(" · ").Append(p.Dept);
             sb.Append("\n상태: ").Append(p.IsOnline ? Status.Label(p.Status_) : "오프라인");

@@ -361,8 +361,19 @@ namespace BluePhone
             if ((sender as FrameworkElement)?.Tag is FileItem f) Media.OpenPreview(f.LocalPath, this);
         }
 
+        /// <summary>프로그램 안내 쪽지: 답장 대신 이 버튼 하나 (예: '텔레그램 열기')</summary>
+        public void SetNotice(string button, Action action)
+        {
+            _notice = action;
+            ReplyText.Text = button;
+            ChatBtn.Visibility = RemindBtn.Visibility = Visibility.Collapsed;
+            if (action == null) ReplyBtn.Visibility = Visibility.Collapsed;
+        }
+        Action _notice;
+
         void Reply_Click(object sender, RoutedEventArgs e)
         {
+            if (_notice != null) { _notice(); return; }
             Reveal();
             if (_chatAlert) { Chat_Click(sender, e); return; }
             MarkRead();

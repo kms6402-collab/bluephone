@@ -211,6 +211,7 @@ namespace BluePhone
             var prevNet = TgNet.Config;
             TgNet.Config = NetFromUi();
             var cts = _pairing = new System.Threading.CancellationTokenSource();
+            MessageWindow notice = null;
             TgConnectBtn.Content = "취소";
             TgTestBtn.Visibility = TgUnlinkBtn.Visibility = Visibility.Collapsed;
             try
@@ -219,8 +220,18 @@ namespace BluePhone
                 var bot = await TelegramBridge.CheckToken(token, cts.Token);
                 var code = new Random().Next(100000, 1000000).ToString();
                 TgStatus.Text = $"텔레그램에서 @{bot} 을 열어 [시작]을 누르거나 '/start {code}' 를 보내 주세요. (3분 안에)";
-                if (!TelegramBridge.TestApi) try { Process.Start($"https://t.me/{bot}?start={code}"); } catch { }
+                // 브라우저를 바로 여는 대신 프로그램 쪽지 창으로 안내 (링크 · 코드는 눌러서 열거나 복사)
+                var link = $"https://t.me/{bot}?start={code}";
+                notice = _core.ShowNotice("텔레그램 연결 안내",
+                    $"내 봇 @{bot} 에게 아래 코드를 보내면 연결됩니다. (3분 안에)\n\n" +
+                    $"**연결 코드: {code}**\n\n" +
+                    $"① 휴대폰 텔레그램에서 @{bot} 을 찾아 대화를 열고\n" +
+                    $"② /start {code} 를 보내세요.\n\n" +
+                    $"PC 텔레그램이 있으면 아래 '텔레그램 열기'를 누르면 바로 열립니다.\n{link}",
+                    "텔레그램 열기", () => Markdown.OpenUrl(link));
                 var (chatId, who) = await _core.Telegram.Pair(token, code, cts.Token);
+                try { notice?.Close(); } catch { }
+                notice = null;
 
                 var s = _core.Settings;
                 s.TelegramToken = token;
@@ -239,6 +250,7 @@ namespace BluePhone
             catch (Exception ex)
             {
                 _pairing = null;
+                try { notice?.Close(); } catch { }
                 // 실패 이유는 다시 시도할 때까지 남겨 둠 (상태 갱신이 덮어쓰지 않도록)
                 _tgError = cts.IsCancellationRequested ? null : "⚠️ " + Explain(ex);
                 TgNet.Config = prevNet;

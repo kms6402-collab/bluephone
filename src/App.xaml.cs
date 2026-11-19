@@ -1054,6 +1054,25 @@ namespace BluePhone
             }
         }
 
+        /// <summary>프로그램이 보여 주는 안내 쪽지 (쪽지함에 남지 않음)</summary>
+        public MessageWindow ShowNotice(string title, string text, string button = null, Action action = null)
+        {
+            var m = new ChatMessage
+            {
+                Id = "notice-" + Guid.NewGuid().ToString("N"),
+                PeerId = "notice:" + title,
+                PeerName = title,
+                PeerDept = AppInfo.Name,
+                Text = text,
+                Ts = DateTimeOffset.Now.ToUnixTimeMilliseconds(),
+                Read = true,
+            };
+            ShowPopup(m, activate: true);
+            var w = _popups.FirstOrDefault(p => p.Message == m);
+            w?.SetNotice(button, action);
+            return w;
+        }
+
         public bool InLayout { get; private set; }
 
         /// <summary>쪽지 창을 화면 오른쪽 아래부터 위로 쌓아 배치 (넘치면 계단식)</summary>
