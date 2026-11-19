@@ -71,6 +71,17 @@ namespace BluePhone
             TgTextChk.IsChecked = s.TelegramShowText;
             TgAwayChk.IsChecked = s.TelegramOnlyAway;
             TgFilesChk.IsChecked = s.TelegramFiles;
+            foreach (System.Windows.Controls.RadioButton rb in TgNetPanel.Children)
+            {
+                rb.IsChecked = (string)rb.Tag == (string.IsNullOrEmpty(s.TelegramNet) ? "auto" : s.TelegramNet);
+                rb.Checked += (o, e) => UpdateProxyPanel();
+            }
+            TgProxyBox.Text = s.TelegramProxy ?? "";
+            TgProxyUserBox.Text = s.TelegramProxyUser ?? "";
+            TgProxyPassBox.Password = Secret.Unprotect(s.TelegramProxyPass);
+            TgApiBox.Text = s.TelegramApi ?? "";
+            TgNetExp.IsExpanded = (s.TelegramNet ?? "auto") != "auto" || !string.IsNullOrWhiteSpace(s.TelegramApi);
+            UpdateProxyPanel();
             TgChk.Checked += (o, e) => TgPanel.Visibility = Visibility.Visible;
             TgChk.Unchecked += (o, e) => TgPanel.Visibility = Visibility.Collapsed;
             TgPanel.Visibility = s.TelegramEnabled ? Visibility.Visible : Visibility.Collapsed;
@@ -86,6 +97,53 @@ namespace BluePhone
         }
 
         // ───────────── telegram ─────────────
+
+        string NetMode => TgNetPanel.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as string ?? "auto";
+
+        void UpdateProxyPanel()
+        {
+            var m = NetMode;
+            TgProxyPanel.Visibility = m == "http" || m == "socks5" ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>화면에 입력한 연결 방법 (저장 전에도 '연결' · '진단'에 바로 씀)</summary>
+        TgNetConfig NetFromUi() => new TgNetConfig
+        {
+            Mode = NetMode,
+            Proxy = TgProxyBox.Text.Trim(),
+            User = TgProxyUserBox.Text.Trim(),
+            Pass = TgProxyPassBox.Password,
+            Api = TgApiBox.Text.Trim(),
+        };
+
+        void SaveNet(AppSettings s)
+        {
+            var c = NetFromUi();
+            s.TelegramNet = c.Mode;
+            s.TelegramProxy = c.Proxy;
+            s.TelegramProxyUser = c.User;
+            s.TelegramProxyPass = Secret.Protect(c.Pass);
+            s.TelegramApi = c.Api;
+            TgNet.Config = c;
+        }
+
+        async void TgDiag_Click(object sender, RoutedEventArgs e)
+        {
+            var c = NetFromUi();
+            if ((c.Mode == "http" || c.Mode == "socks5") && c.Proxy.Length == 0)
+            {
+                TgDiagText.Visibility = Visibility.Visible;
+                TgDiagText.Text = "프록시 주소를 입력해 주세요. 예) 203.0.113.10:1080";
+                TgProxyBox.Focus();
+                return;
+            }
+            TgDiagBtn.IsEnabled = false;
+            TgDiagText.Visibility = Visibility.Visible;
+            TgDiagText.Text = "시험하는 중…";
+            try { TgDiagText.Text = await TgNet.Diagnose(c, System.Threading.CancellationToken.None); }
+            catch (Exception ex) { TgDiagText.Text = "진단하지 못했습니다: " + TgNet.Short(ex); }
+            TgDiagBtn.IsEnabled = true;
+        }
 
         System.Threading.CancellationTokenSource _pairing;
         /// <summary>마지막 연결 실패 이유 (다시 시도하기 전까지 계속 표시)</summary>
@@ -111,12 +169,14 @@ namespace BluePhone
             if (w != null)
             {
                 if (w.Status == System.Net.WebExceptionStatus.NameResolutionFailure || w.Status == System.Net.WebExceptionStatus.ConnectFailure)
-                    return "텔레그램 서버(api.telegram.org)에 연결할 수 없습니다. 인터넷 연결이나 회사 방화벽 · 프록시 설정을 확인해 주세요. (" + w.Status + ")";
+                    return "텔레그램 서버에 연결할 수 없습니다. 회사 방화벽이 막고 있을 수 있습니다 — 아래 '연결 방법 · 프록시'에서 '연결 진단'을 누르고, 안 되면 외부 프록시를 지정해 보세요. (" + w.Status + ")";
                 if (w.Status == System.Net.WebExceptionStatus.TrustFailure || w.Status == System.Net.WebExceptionStatus.SecureChannelFailure)
                     return "보안 연결(HTTPS)을 만들지 못했습니다. 회사 보안 프로그램이 텔레그램을 막고 있을 수 있습니다. (" + w.Status + ")";
                 return "텔레그램에 연결하지 못했습니다: " + w.Message + " (" + w.Status + ")";
             }
-            return "연결하지 못했습니다: " + ex.Message;
+            if (ex is System.IO.IOException || ex is System.Net.Sockets.SocketException || ex.InnerException is System.Net.Sockets.SocketException)
+                return "텔레그램 서버에 연결할 수 없습니다: " + TgNet.Short(ex) + "\n아래 '연결 방법 · 프록시'에서 '연결 진단'을 눌러 보세요.";
+            return "연결하지 못했습니다: " + TgNet.Short(ex) + "\n아래 '연결 방법 · 프록시'에서 '연결 진단'을 눌러 보세요.";
         }
 
         void RefreshTg()
@@ -131,7 +191,8 @@ namespace BluePhone
             var who = string.IsNullOrEmpty(s.TelegramWho) ? "" : s.TelegramWho;
             var bot = string.IsNullOrEmpty(s.TelegramBot) ? "" : " · 봇 @" + s.TelegramBot;
             var st = _core.Telegram?.State ?? "";
-            TgStatus.Text = "연결됨: " + who + bot + (st.Length > 0 && st != "연결됨" && s.TelegramEnabled ? "\n" + st : "");
+            var via = string.IsNullOrEmpty(TgNet.LastRoute) ? "" : " · " + TgNet.RouteLabel(TgNet.LastRoute);
+            TgStatus.Text = "연결됨: " + who + bot + via + (st.Length > 0 && st != "연결됨" && s.TelegramEnabled ? "\n" + st : "");
         }
 
         async void TgConnect_Click(object sender, RoutedEventArgs e)
@@ -147,6 +208,8 @@ namespace BluePhone
                 TgTokenBox.Focus();
                 return;
             }
+            var prevNet = TgNet.Config;
+            TgNet.Config = NetFromUi();
             var cts = _pairing = new System.Threading.CancellationTokenSource();
             TgConnectBtn.Content = "취소";
             TgTestBtn.Visibility = TgUnlinkBtn.Visibility = Visibility.Collapsed;
@@ -165,6 +228,7 @@ namespace BluePhone
                 s.TelegramWho = who;
                 s.TelegramBot = bot;
                 s.TelegramEnabled = true;
+                SaveNet(s);   // 연결에 성공한 방법을 저장
                 Store.SaveSettings(s);
                 TgChk.IsChecked = true;
                 _pairing = null;
@@ -177,6 +241,7 @@ namespace BluePhone
                 _pairing = null;
                 // 실패 이유는 다시 시도할 때까지 남겨 둠 (상태 갱신이 덮어쓰지 않도록)
                 _tgError = cts.IsCancellationRequested ? null : "⚠️ " + Explain(ex);
+                TgNet.Config = prevNet;
                 _core.Telegram?.Apply();
                 RefreshTg();
             }
@@ -349,6 +414,7 @@ namespace BluePhone
             s.TelegramShowText = TgTextChk.IsChecked == true;
             s.TelegramOnlyAway = TgAwayChk.IsChecked == true;
             s.TelegramFiles = TgFilesChk.IsChecked == true;
+            SaveNet(s);
             if (_photoChanged) s.AvatarHash = AvatarStore.SetMine(_photo);
             s.ManualHosts = HostsBox.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                                  .Select(x => x.Trim()).Where(x => x.Length > 0).Distinct().ToList();

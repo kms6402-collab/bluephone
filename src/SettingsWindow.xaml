@@ -191,6 +191,44 @@
                             <TextBlock x:Name="TgStatus" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Ink2}"/>
                         </DockPanel>
                     </Border>
+                    <!-- 연결 방법 (회사 방화벽 · 프록시) -->
+                    <Expander x:Name="TgNetExp" Margin="0,10,0,0" Foreground="{DynamicResource Ink}">
+                        <Expander.Header>
+                            <TextBlock Text="연결 방법 · 프록시 (연결이 안 될 때)" FontWeight="SemiBold"/>
+                        </Expander.Header>
+                        <StackPanel Margin="0,8,0,0">
+                            <WrapPanel x:Name="TgNetPanel">
+                                <RadioButton GroupName="TgNet" Style="{StaticResource FilterChip}" Tag="auto" Margin="0,0,6,6"><TextBlock Text="자동 (권장)" FontSize="12"/></RadioButton>
+                                <RadioButton GroupName="TgNet" Style="{StaticResource FilterChip}" Tag="system" Margin="0,0,6,6"><TextBlock Text="Windows 기본" FontSize="12"/></RadioButton>
+                                <RadioButton GroupName="TgNet" Style="{StaticResource FilterChip}" Tag="direct" Margin="0,0,6,6"><TextBlock Text="직접 연결" FontSize="12"/></RadioButton>
+                                <RadioButton GroupName="TgNet" Style="{StaticResource FilterChip}" Tag="http" Margin="0,0,6,6"><TextBlock Text="HTTP 프록시" FontSize="12"/></RadioButton>
+                                <RadioButton GroupName="TgNet" Style="{StaticResource FilterChip}" Tag="socks5" Margin="0,0,6,6"><TextBlock Text="SOCKS5 프록시" FontSize="12"/></RadioButton>
+                            </WrapPanel>
+                            <TextBlock Style="{StaticResource Help}" Text="자동: Windows 기본 방식(시스템 프록시)과 직접 연결을 차례로 시도하고, 되는 방법을 기억합니다."/>
+                            <StackPanel x:Name="TgProxyPanel" Margin="0,8,0,0">
+                                <TextBlock Text="프록시 주소" Style="{StaticResource Label}"/>
+                                <TextBox x:Name="TgProxyBox" Style="{StaticResource Field}" Tag="예) 203.0.113.10:1080  ·  proxy.example.com:8080"/>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="TgProxyUserBox" Style="{StaticResource Field}" Tag="사용자 (없으면 비워 두기)"/>
+                                    <PasswordBox x:Name="TgProxyPassBox" Grid.Column="2" Style="{StaticResource PassField}" ToolTip="비밀번호 (Windows 계정으로 암호화해 저장)"/>
+                                </Grid>
+                            </StackPanel>
+                            <TextBlock Text="API 서버 주소 (선택)" Style="{StaticResource Label}" Margin="0,10,0,6"/>
+                            <TextBox x:Name="TgApiBox" Style="{StaticResource Field}" Tag="비워 두면 https://api.telegram.org"/>
+                            <TextBlock Style="{StaticResource Help}" Margin="0,4,0,0"
+                                       Text="텔레그램 주소 자체가 막혀 있으면, 텔레그램 Bot API 를 그대로 전달하는 중계 서버(예: 내 Cloudflare Worker) 주소를 넣을 수 있습니다."/>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button x:Name="TgDiagBtn" Style="{StaticResource Outline}" Content="연결 진단" Height="28" Click="TgDiag_Click"/>
+                                <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,0,0,0" Text="각 방법으로 텔레그램 서버에 닿는지 시험합니다"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TgDiagText" Style="{StaticResource Help}" Margin="0,8,0,0" Visibility="Collapsed" FontFamily="Cascadia Mono, Consolas, Malgun Gothic"/>
+                        </StackPanel>
+                    </Expander>
                     <Border Style="{StaticResource Row}" Margin="0,8,0,0">
                         <CheckBox x:Name="TgNotesChk" Style="{StaticResource Switch}"><TextBlock Text="받은 쪽지 보내기"/></CheckBox>
                     </Border>

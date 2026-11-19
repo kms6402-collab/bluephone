@@ -312,6 +312,15 @@ namespace BluePhone
         public bool TelegramFiles { get; set; } = true;
         /// <summary>자리를 비웠을 때만 보내기 (상태가 '대화 가능'이 아니거나 3분 넘게 PC를 쓰지 않을 때)</summary>
         public bool TelegramOnlyAway { get; set; }
+        /// <summary>텔레그램 연결 방법: auto · system · direct · http · socks5</summary>
+        public string TelegramNet { get; set; } = "auto";
+        /// <summary>외부 프록시 "주소:포트"</summary>
+        public string TelegramProxy { get; set; } = "";
+        public string TelegramProxyUser { get; set; } = "";
+        /// <summary>프록시 비밀번호 (Windows 계정으로 암호화해 저장)</summary>
+        public string TelegramProxyPass { get; set; } = "";
+        /// <summary>API 서버 주소 (비우면 api.telegram.org). 중계 서버를 쓸 때</summary>
+        public string TelegramApi { get; set; } = "";
         public bool EnterToSend { get; set; } = true;
         public double WinLeft { get; set; } = -1e6;
         public double WinTop { get; set; } = -1e6;

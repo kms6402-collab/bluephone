@@ -57,15 +57,7 @@ namespace BluePhone
 
         static TelegramBridge() { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
 
-        /// <summary>API 주소 (테스트용으로 환경 변수 BLUEPHONE_TELEGRAM_API 로 바꿀 수 있음)</summary>
-        static string ApiBase
-        {
-            get
-            {
-                var v = Environment.GetEnvironmentVariable("BLUEPHONE_TELEGRAM_API");
-                return string.IsNullOrWhiteSpace(v) ? "https://api.telegram.org" : v.Trim().TrimEnd('/');
-            }
-        }
+        static string ApiBase => TgNet.ApiBase;
 
         public static bool TestApi => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BLUEPHONE_TELEGRAM_API"));
 
@@ -488,14 +480,9 @@ namespace BluePhone
             Directory.CreateDirectory(dir);
             foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
             var dest = Store.UniquePath(dir, name);
-            var req = (HttpWebRequest)WebRequest.Create($"{ApiBase}/file/bot{token.Trim()}/{fp}");
-            Prepare(req);
-            using (var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5)))
-            using (cts.Token.Register(() => { try { req.Abort(); } catch { } }))
-            using (var resp = await req.GetResponseAsync().ConfigureAwait(false))
-            using (var src = resp.GetResponseStream())
-            using (var fs = File.Create(dest))
-                await src.CopyToAsync(fs).ConfigureAwait(false);
+            var resp = await TgNet.Send("GET", $"{ApiBase}/file/bot{token.Trim()}/{fp}", null, 0, null, 5 * 60000, CancellationToken.None).ConfigureAwait(false);
+            if (resp.Status != 200) throw new InvalidOperationException($"텔레그램에서 파일을 받지 못했습니다 (HTTP {resp.Status}).");
+            File.WriteAllBytes(dest, resp.Body);
             return dest;
         }
 
@@ -916,36 +903,16 @@ namespace BluePhone
         static async Task<object> Call(string token, string method, Dictionary<string, string> args, int timeoutMs, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(token)) throw new TelegramException(401, "봇 토큰이 없습니다.");
-            var req = (HttpWebRequest)WebRequest.Create($"{ApiBase}/bot{token.Trim()}/{method}");
-            req.Method = "POST";
-            req.ContentType = "application/x-www-form-urlencoded";
-            Prepare(req);
             var body = Encoding.UTF8.GetBytes(args == null ? "" : string.Join("&", args.Select(kv => kv.Key + "=" + Uri.EscapeDataString(kv.Value ?? ""))));
-            return await Execute(req, async s => await s.WriteAsync(body, 0, body.Length).ConfigureAwait(false), timeoutMs, ct).ConfigureAwait(false);
-        }
-
-        static void Prepare(HttpWebRequest req)
-        {
-            req.UserAgent = "BluePhone/" + AppInfo.VersionText;
-            try
-            {
-                var proxy = WebRequest.GetSystemWebProxy();
-                proxy.Credentials = CredentialCache.DefaultCredentials;
-                req.Proxy = proxy;
-            }
-            catch { }
+            var r = await TgNet.Send("POST", $"{ApiBase}/bot{token.Trim()}/{method}", "application/x-www-form-urlencoded", body.Length,
+                                     s => s.WriteAsync(body, 0, body.Length), timeoutMs, ct).ConfigureAwait(false);
+            return Parse(r);
         }
 
         /// <summary>파일 올리기 (multipart/form-data)</summary>
         static async Task<object> Upload(string token, string method, Dictionary<string, string> fields, string fileField, string path, string fileName, int timeoutMs)
         {
-            var req = (HttpWebRequest)WebRequest.Create($"{ApiBase}/bot{token.Trim()}/{method}");
-            req.Method = "POST";
             var boundary = "----BluePhone" + Guid.NewGuid().ToString("N");
-            req.ContentType = "multipart/form-data; boundary=" + boundary;
-            req.AllowWriteStreamBuffering = false;
-            req.SendChunked = false;
-            Prepare(req);
             var sb = new StringBuilder();
             foreach (var kv in fields)
                 sb.Append("--").Append(boundary).Append("\r\nContent-Disposition: form-data; name=\"").Append(kv.Key).Append("\"\r\n\r\n").Append(kv.Value).Append("\r\n");
@@ -955,52 +922,30 @@ namespace BluePhone
             var head = Encoding.UTF8.GetBytes(sb.ToString());
             var tail = Encoding.UTF8.GetBytes("\r\n--" + boundary + "--\r\n");
             var len = new FileInfo(path).Length;
-            req.ContentLength = head.Length + len + tail.Length;
-            return await Execute(req, async s =>
-            {
-                await s.WriteAsync(head, 0, head.Length).ConfigureAwait(false);
-                using (var fs = File.OpenRead(path)) await fs.CopyToAsync(s, 81920).ConfigureAwait(false);
-                await s.WriteAsync(tail, 0, tail.Length).ConfigureAwait(false);
-            }, timeoutMs, CancellationToken.None).ConfigureAwait(false);
+            var r = await TgNet.Send("POST", $"{ApiBase}/bot{token.Trim()}/{method}", "multipart/form-data; boundary=" + boundary,
+                head.Length + len + tail.Length, async s =>
+                {
+                    await s.WriteAsync(head, 0, head.Length).ConfigureAwait(false);
+                    using (var fs = File.OpenRead(path)) await fs.CopyToAsync(s, 81920).ConfigureAwait(false);
+                    await s.WriteAsync(tail, 0, tail.Length).ConfigureAwait(false);
+                }, timeoutMs, CancellationToken.None).ConfigureAwait(false);
+            return Parse(r);
         }
 
-        static async Task<object> Execute(HttpWebRequest req, Func<Stream, Task> write, int timeoutMs, CancellationToken ct)
+        static object Parse(TgNet.Response r)
         {
-            using (var lim = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            Dictionary<string, object> d = null;
+            try { d = Store.Json.DeserializeObject(r.Text) as Dictionary<string, object>; } catch { }
+            if (d == null)
             {
-                lim.CancelAfter(timeoutMs);
-                using (lim.Token.Register(() => { try { req.Abort(); } catch { } }))
-                {
-                    string json;
-                    int http = 200;
-                    try
-                    {
-                        using (var s = await req.GetRequestStreamAsync().ConfigureAwait(false))
-                            await write(s).ConfigureAwait(false);
-                        using (var resp = await req.GetResponseAsync().ConfigureAwait(false))
-                        using (var rd = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
-                            json = await rd.ReadToEndAsync().ConfigureAwait(false);
-                    }
-                    catch (WebException ex) when (ex.Response is HttpWebResponse hr)
-                    {
-                        http = (int)hr.StatusCode;
-                        using (var rd = new StreamReader(hr.GetResponseStream(), Encoding.UTF8)) json = rd.ReadToEnd();
-                    }
-                    catch (WebException) when (lim.IsCancellationRequested)
-                    {
-                        if (ct.IsCancellationRequested) throw new OperationCanceledException(ct);
-                        throw new TimeoutException("응답 시간 초과");
-                    }
-
-                    Dictionary<string, object> d = null;
-                    try { d = Store.Json.DeserializeObject(json) as Dictionary<string, object>; } catch { }
-                    if (d == null) throw new TelegramException(http, $"알 수 없는 응답 (HTTP {http})");
-                    if (d.TryGetValue("ok", out var ok) && ok is bool b && b)
-                        return d.TryGetValue("result", out var res) ? res : null;
-                    var code = (int)Long(d, "error_code");
-                    throw new TelegramException(code != 0 ? code : http, Str(d, "description") ?? $"HTTP {http}");
-                }
+                // 텔레그램이 아닌 곳(회사 차단 페이지 · 프록시 오류 화면)의 응답
+                if (r.Status == 403 || r.Status == 451) throw new TelegramException(r.Status, $"접속이 차단되었습니다 (HTTP {r.Status}). 회사 방화벽이 텔레그램을 막고 있을 수 있습니다 — 설정 › 텔레그램 › 연결 방법에서 프록시나 중계 서버를 지정해 보세요.");
+                throw new TelegramException(r.Status, $"텔레그램이 아닌 곳에서 응답했습니다 (HTTP {r.Status}). 방화벽 · 프록시 · 중계 서버 주소를 확인해 주세요.");
             }
+            if (d.TryGetValue("ok", out var ok) && ok is bool b && b)
+                return d.TryGetValue("result", out var res) ? res : null;
+            var code = (int)Long(d, "error_code");
+            throw new TelegramException(code != 0 ? code : r.Status, Str(d, "description") ?? $"HTTP {r.Status}");
         }
 
         // ── JSON helpers ──

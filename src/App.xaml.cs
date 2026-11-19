@@ -231,6 +231,7 @@ namespace BluePhone
             Net.Announce(wantReply: true);
             PingManualHosts();
             _lastAnnounce = DateTime.Now;
+            TgNet.Config = TgNetConfig.From(Settings);
             Telegram = new TelegramBridge(this);
             Telegram.Apply();
             _tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
