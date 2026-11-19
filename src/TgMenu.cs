@@ -115,7 +115,7 @@ namespace BluePhone
             new[] { ("📝 상태 메시지", "memo"), ("🤖 자동응답", "ar") },
             new[] { ("⛔ 동료 차단", "new|blk"), ("✅ 차단 풀기", "ub") },
             new[] { ("➕ IP로 동료 추가", "add"), ("🔄 동료 다시 찾기", "rescan") },
-            new[] { ("ℹ️ 내 정보", "me"), ("❓ 명령어 도움말", "help") },
+            new[] { ("ℹ️ 내 정보", "me"), ("❓ 사용 방법", "help") },
             new[] { ("◀ 메뉴", "menu") });
 
         static string ActTitle(string act)

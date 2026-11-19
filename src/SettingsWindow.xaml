@@ -169,7 +169,7 @@
                     <CheckBox x:Name="TgChk" Style="{StaticResource Switch}">
                         <StackPanel>
                             <TextBlock Text="텔레그램으로 알림 받기"/>
-                            <TextBlock Text="받은 쪽지 · 대화를 내 텔레그램으로 보내고, 텔레그램에서 답장하거나 명령어로 동료에게 보낼 수 있습니다" Style="{StaticResource Help}"/>
+                            <TextBlock Text="받은 쪽지 · 대화를 내 텔레그램으로 보내고, 텔레그램의 버튼 메뉴로 동료를 골라 보낼 수 있습니다" Style="{StaticResource Help}"/>
                         </StackPanel>
                     </CheckBox>
                 </Border>
@@ -260,7 +260,7 @@
                         </CheckBox>
                     </Border>
                     <TextBlock Style="{StaticResource Help}" Margin="0,8,0,0"
-                               Text="텔레그램에서: 받은 메시지에 답장 · /r 내용 (마지막 메시지에 답장) · /list · /msg 이름 내용 · /chat · /urgent · /all · /group · /later · /unread · /status · /memo · /mute · /notify 등. 전체 명령은 봇에게 /help 를 보내 보세요. 사진 · 파일은 답장으로 보내거나 설명에 '/msg 이름'을 적으면 첨부파일로 전달됩니다 (20MB 까지). 이 PC에서 파란전화기가 실행 중일 때만 동작합니다."/>
+                               Text="텔레그램에서: 아래쪽 📋 메뉴 · ✉️ 쪽지 · 💬 대화 버튼을 누르고 동료를 골라 내용(사진 · 파일 포함, 20MB 까지)을 보내면 됩니다. 받은 알림 아래 버튼으로 바로 답장할 수 있습니다. 이 PC에서 파란전화기가 실행 중일 때만 동작합니다."/>
                 </StackPanel>
 
                 <!-- away -->
