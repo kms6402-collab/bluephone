@@ -93,6 +93,7 @@ namespace BluePhone
         public ObservableCollection<Peer> Peers { get; } = new ObservableCollection<Peer>();
         public ObservableCollection<ChatMessage> History { get; } = new ObservableCollection<ChatMessage>();
         public NetService Net { get; private set; } = new NetService();
+        public TelegramBridge Telegram { get; private set; }
 
         public event Action StatusChanged;
         public Func<bool> RelaunchOnNetFail { get; set; }
@@ -230,6 +231,8 @@ namespace BluePhone
             Net.Announce(wantReply: true);
             PingManualHosts();
             _lastAnnounce = DateTime.Now;
+            Telegram = new TelegramBridge(this);
+            Telegram.Apply();
             _tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _tick.Tick += (s, e) => Tick();
             _tick.Start();
@@ -271,6 +274,7 @@ namespace BluePhone
         public void Stop()
         {
             _hotkey?.Dispose();
+            Telegram?.Stop();
             // 받아 둔 업데이트가 있으면 종료하면서 교체 (다음 실행부터 새 버전)
             if (Updater.ReadyPath != null) Updater.Apply(restart: false);
             try { Net.SayBye(Settings.Id); } catch { }
@@ -786,6 +790,7 @@ namespace BluePhone
             History.Insert(0, m);
             Store.AppendHistory(m);
             AutoFetchImages(m);
+            Telegram?.Forward(m, _status);
             peer.HasUnread = true;
             UnreadChanged?.Invoke();
             UpdateTray();

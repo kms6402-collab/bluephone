@@ -63,7 +63,109 @@ namespace BluePhone
             ExeText.Text = $"프로세스 이름  {Process.GetCurrentProcess().ProcessName}\n실행 파일  {Native.ExePath}";
             MyIps.Text = "이 PC 주소  " + string.Join(", ", LocalIps().Select(ip => $"{ip}:{s.Port}")) + "  — 동료가 이 주소로 나를 추가할 수 있습니다";
 
+            TgChk.IsChecked = s.TelegramEnabled;
+            TgTokenBox.Text = s.TelegramToken ?? "";
+            TgNotesChk.IsChecked = s.TelegramNotes;
+            TgChatsChk.IsChecked = s.TelegramChats;
+            TgTextChk.IsChecked = s.TelegramShowText;
+            TgAwayChk.IsChecked = s.TelegramOnlyAway;
+            TgFilesChk.IsChecked = s.TelegramFiles;
+            TgChk.Checked += (o, e) => TgPanel.Visibility = Visibility.Visible;
+            TgChk.Unchecked += (o, e) => TgPanel.Visibility = Visibility.Collapsed;
+            TgPanel.Visibility = s.TelegramEnabled ? Visibility.Visible : Visibility.Collapsed;
+            RefreshTg();
+            if (core.Telegram != null) core.Telegram.StateChanged += RefreshTg;
+            Closed += (o, e) =>
+            {
+                if (core.Telegram != null) core.Telegram.StateChanged -= RefreshTg;
+                if (_pairing != null) { _pairing.Cancel(); _pairing = null; core.Telegram?.Apply(); }
+            };
+
             Loaded += (o, e) => NameBox.Focus();
+        }
+
+        // ───────────── telegram ─────────────
+
+        System.Threading.CancellationTokenSource _pairing;
+
+        void RefreshTg()
+        {
+            if (_pairing != null) return;
+            var s = _core.Settings;
+            bool linked = !string.IsNullOrWhiteSpace(s.TelegramToken) && s.TelegramChatId != 0;
+            TgTestBtn.Visibility = TgUnlinkBtn.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
+            TgConnectBtn.Content = linked ? "다시 연결" : "연결";
+            if (!linked) { TgStatus.Text = "연결되지 않음 — 봇 토큰을 넣고 '연결'을 누르세요"; return; }
+            var who = string.IsNullOrEmpty(s.TelegramWho) ? "" : s.TelegramWho;
+            var bot = string.IsNullOrEmpty(s.TelegramBot) ? "" : " · 봇 @" + s.TelegramBot;
+            var st = _core.Telegram?.State ?? "";
+            TgStatus.Text = "연결됨: " + who + bot + (st.Length > 0 && st != "연결됨" && s.TelegramEnabled ? "\n" + st : "");
+        }
+
+        async void TgConnect_Click(object sender, RoutedEventArgs e)
+        {
+            if (_pairing != null) { _pairing.Cancel(); return; }
+            var token = TgTokenBox.Text.Trim();
+            if (token.Length == 0 || !token.Contains(":"))
+            {
+                Dialog.Alert(this, "봇 토큰을 확인해 주세요", "텔레그램 @BotFather 에서 /newbot 으로 봇을 만들면 '123456789:ABC…' 형식의 토큰을 받을 수 있습니다.");
+                TgTokenBox.Focus();
+                return;
+            }
+            var cts = _pairing = new System.Threading.CancellationTokenSource();
+            TgConnectBtn.Content = "취소";
+            TgTestBtn.Visibility = TgUnlinkBtn.Visibility = Visibility.Collapsed;
+            try
+            {
+                TgStatus.Text = "봇 확인 중…";
+                var bot = await TelegramBridge.CheckToken(token, cts.Token);
+                var code = new Random().Next(100000, 1000000).ToString();
+                TgStatus.Text = $"텔레그램에서 @{bot} 을 열어 [시작]을 누르거나 '/start {code}' 를 보내 주세요. (3분 안에)";
+                if (!TelegramBridge.TestApi) try { Process.Start($"https://t.me/{bot}?start={code}"); } catch { }
+                var (chatId, who) = await _core.Telegram.Pair(token, code, cts.Token);
+
+                var s = _core.Settings;
+                s.TelegramToken = token;
+                s.TelegramChatId = chatId;
+                s.TelegramWho = who;
+                s.TelegramBot = bot;
+                s.TelegramEnabled = true;
+                Store.SaveSettings(s);
+                TgChk.IsChecked = true;
+                _pairing = null;
+                try { await TelegramBridge.Welcome(token, chatId, s.Name, System.Threading.CancellationToken.None); } catch { }
+                _core.Telegram.Apply();
+                RefreshTg();
+            }
+            catch (Exception ex)
+            {
+                _pairing = null;
+                RefreshTg();
+                if (!cts.IsCancellationRequested)
+                    TgStatus.Text = "연결하지 못했습니다: " + (ex is TelegramException te && (te.Code == 401 || te.Code == 404) ? "봇 토큰이 올바르지 않습니다." : ex.Message);
+                _core.Telegram?.Apply();
+            }
+            finally { if (_pairing == null) TgConnectBtn.Content = _core.Telegram?.Connected == true ? "다시 연결" : "연결"; }
+        }
+
+        async void TgTest_Click(object sender, RoutedEventArgs e)
+        {
+            TgTestBtn.IsEnabled = false;
+            try { await _core.Telegram.SendTest(); TgStatus.Text = "테스트 알림을 보냈습니다. 텔레그램을 확인해 보세요."; }
+            catch (Exception ex) { TgStatus.Text = "보내지 못했습니다: " + ex.Message; }
+            TgTestBtn.IsEnabled = true;
+        }
+
+        void TgUnlink_Click(object sender, RoutedEventArgs e)
+        {
+            var s = _core.Settings;
+            s.TelegramChatId = 0;
+            s.TelegramWho = "";
+            s.TelegramEnabled = false;
+            Store.SaveSettings(s);
+            TgChk.IsChecked = false;
+            _core.Telegram?.Apply();
+            RefreshTg();
         }
 
         internal static string[] LocalIps()
@@ -204,6 +306,14 @@ namespace BluePhone
             s.DownloadDir = DirBox.Text.Trim();
             s.Port = port;
             s.AutoUpdate = AutoUpdateChk.IsChecked == true;
+            var tgToken = TgTokenBox.Text.Trim();
+            if (tgToken != (s.TelegramToken ?? "").Trim()) { s.TelegramToken = tgToken; s.TelegramChatId = 0; s.TelegramWho = ""; }
+            s.TelegramEnabled = TgChk.IsChecked == true;
+            s.TelegramNotes = TgNotesChk.IsChecked == true;
+            s.TelegramChats = TgChatsChk.IsChecked == true;
+            s.TelegramShowText = TgTextChk.IsChecked == true;
+            s.TelegramOnlyAway = TgAwayChk.IsChecked == true;
+            s.TelegramFiles = TgFilesChk.IsChecked == true;
             if (_photoChanged) s.AvatarHash = AvatarStore.SetMine(_photo);
             s.ManualHosts = HostsBox.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                                  .Select(x => x.Trim()).Where(x => x.Length > 0).Distinct().ToList();
@@ -211,6 +321,7 @@ namespace BluePhone
             if (!Store.CustomDir) Native.SetAutoStart(s.AutoStart);
             _core.ProfileChanged();
             Close();
+            _core.Telegram?.Apply();
 
             if (portChanged)
             {

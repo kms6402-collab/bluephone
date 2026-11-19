@@ -299,6 +299,19 @@ namespace BluePhone
         public List<PeerGroup> Groups { get; set; } = new List<PeerGroup>();
         public List<Reminder> Reminders { get; set; } = new List<Reminder>();
         public bool CaptureHotkey { get; set; } = true;
+        /// <summary>텔레그램 연동: 받은 쪽지 · 대화를 텔레그램으로 받고, 텔레그램에서 명령으로 보내기</summary>
+        public bool TelegramEnabled { get; set; }
+        public string TelegramToken { get; set; } = "";
+        public long TelegramChatId { get; set; }
+        public string TelegramWho { get; set; } = "";
+        public string TelegramBot { get; set; } = "";
+        public bool TelegramNotes { get; set; } = true;
+        public bool TelegramChats { get; set; } = true;
+        public bool TelegramShowText { get; set; } = true;
+        /// <summary>받은 첨부파일도 텔레그램으로 (50MB 이하)</summary>
+        public bool TelegramFiles { get; set; } = true;
+        /// <summary>자리를 비웠을 때만 보내기 (상태가 '대화 가능'이 아니거나 3분 넘게 PC를 쓰지 않을 때)</summary>
+        public bool TelegramOnlyAway { get; set; }
         public bool EnterToSend { get; set; } = true;
         public double WinLeft { get; set; } = -1e6;
         public double WinTop { get; set; } = -1e6;
