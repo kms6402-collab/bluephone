@@ -126,7 +126,8 @@ jobs:
           test -n "$APP"
           file "$APP/Contents/MacOS/BluePhone"
           "$APP/Contents/MacOS/BluePhone" --selftest
-          pkill -x BluePhone || true
+          sleep 3; pkill -x BluePhone || true
+          bash mac/packaging/smoke.sh "$APP"
 
       - name: Upload to release
         env:

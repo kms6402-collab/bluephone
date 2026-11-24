@@ -36,6 +36,7 @@ jobs:
       - name: Self test
         run: |
           mac/obj/pkg/stage-arm64/*.app/Contents/MacOS/BluePhone --selftest
+          bash mac/packaging/smoke.sh "$(ls -d mac/obj/pkg/stage-arm64/*.app)"
           pkgutil --payload-files dist/BluePhone-mac.pkg | head -5 || true
       - uses: actions/upload-artifact@v4
         with:

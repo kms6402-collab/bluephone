@@ -22,6 +22,7 @@ namespace BluePhone
         public static int Main(string[] args)
         {
             Args = args;
+            AppDomain.CurrentDomain.UnhandledException += (s, e) => Log(e.ExceptionObject?.ToString());
             var ko = new CultureInfo("ko-KR");
             CultureInfo.DefaultThreadCurrentCulture = CultureInfo.DefaultThreadCurrentUICulture = ko;
             Thread.CurrentThread.CurrentCulture = Thread.CurrentThread.CurrentUICulture = ko;
@@ -39,7 +40,6 @@ namespace BluePhone
                 return 0;
             }
 
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => Log(e.ExceptionObject?.ToString());
             TaskScheduler.UnobservedTaskException += (s, e) => { Log(e.Exception?.ToString()); e.SetObserved(); };
 
             try
@@ -64,16 +64,18 @@ namespace BluePhone
 
         static bool AcquireLock()
         {
+            try { Directory.CreateDirectory(Store.Dir); } catch { }
             var path = Path.Combine(Store.Dir, "instance.lock");
             for (int i = 0; i < (Has("--restart") ? 40 : 1); i++)
             {
                 try
                 {
+                    // macOS/Linux 의 .NET 은 FileShare.None 을 flock(배타 잠금)으로 처리한다.
+                    // (FileStream.Lock 은 macOS 에서 지원되지 않아 예외가 나므로 쓰지 않음)
                     _lock = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                    if (!OperatingSystem.IsWindows()) _lock.Lock(0, 1);
                     return true;
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
                 {
                     _lock?.Dispose(); _lock = null;
                     Thread.Sleep(200);
