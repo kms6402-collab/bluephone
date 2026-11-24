@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 하나의 설치 파일에 Apple Silicon · Intel 판을 함께 넣고, 설치하는 Mac 에 맞는 것만 설치한다 -->
+<installer-gui-script minSpecVersion="2">
+  <title>파란전화기</title>
+  <welcome file="welcome.html" mime-type="text/html"/>
+  <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64" rootVolumeOnly="true"/>
+  <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+  <volume-check>
+    <allowed-os-versions>
+      <os-version min="12.0"/>
+    </allowed-os-versions>
+  </volume-check>
+  <script><![CDATA[
+function isArm() {
+  try { return system.sysctl('hw.optional.arm64') == 1; } catch (e) { return false; }
+}
+  ]]></script>
+  <choices-outline>
+    <line choice="arm64"/>
+    <line choice="x64"/>
+  </choices-outline>
+  <choice id="arm64" title="파란전화기 (Apple Silicon)" visible="false" selected="isArm()" enabled="isArm()">
+    <pkg-ref id="com.bluephone.messenger.arm64"/>
+  </choice>
+  <choice id="x64" title="파란전화기 (Intel)" visible="false" selected="!isArm()" enabled="!isArm()">
+    <pkg-ref id="com.bluephone.messenger.x64"/>
+  </choice>
+  <pkg-ref id="com.bluephone.messenger.arm64" version="__VERSION__" onConclusion="none">BluePhone-arm64.pkg</pkg-ref>
+  <pkg-ref id="com.bluephone.messenger.x64" version="__VERSION__" onConclusion="none">BluePhone-x64.pkg</pkg-ref>
+</installer-gui-script>

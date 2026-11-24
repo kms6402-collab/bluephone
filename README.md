@@ -3,7 +3,7 @@
 <h1 align="center">파란전화기</h1>
 
 <p align="center">서버 없이 같은 사내 네트워크에서 바로 쓰는 팝업 쪽지 메신저<br>
-2007년의 "빨간전화기 X-PopUp" 감성을 지금 Windows에 맞게 다시 만든 프로그램입니다.</p>
+2007년의 "빨간전화기 X-PopUp" 감성을 지금 Windows · macOS에 맞게 다시 만든 프로그램입니다.</p>
 
 <p align="center">
   <a href="../../releases/latest"><b>최신 버전 내려받기</b></a> ·
@@ -18,6 +18,7 @@
 ## 특징
 
 - **설치 없음** — 실행 파일 하나(약 270 KB). Windows 10/11에 기본으로 들어 있는 .NET Framework 4.8로 동작합니다.
+- **Windows · macOS** — 맥용 설치 파일(`BluePhone-mac.pkg`)도 제공합니다. Windows 판과 맥 판이 서로 쪽지 · 대화 · 파일을 그대로 주고받습니다.
 - **서버 없음** — 같은 네트워크의 PC를 자동으로 찾습니다. 라우터 너머 다른 대역은 IP를 직접 등록하면 됩니다.
 - **파일 이름을 마음대로** — `파란전화기.exe`, `사내쪽지.exe` 무엇으로 바꿔도 실행되고, 작업 관리자에도 바꾼 이름으로 표시됩니다.
 - **자동 업데이트** — 이 저장소에 새 버전이 올라오면 프로그램이 받아 두고 변경 사항과 함께 알려 줍니다.
@@ -75,6 +76,18 @@ irm https://raw.githubusercontent.com/kms6402-collab/bluephone/main/install.ps1 
 3. 처음 한 번은 "Windows의 PC 보호" 창이 뜨면 *추가 정보 → 실행*을 누릅니다. 프로그램이 실행되면서 '인터넷에서 받은 파일' 표시를 스스로 지우므로 **다음부터는 경고가 뜨지 않습니다.**
 
 처음 실행하면 이름·부서를 입력하는 화면이 뜹니다. **Windows 방화벽 허용** 창이 뜨면 *허용*을 눌러 주세요. 그래야 다른 PC와 통신할 수 있습니다.
+
+### macOS (Apple Silicon · Intel, macOS 12 이상)
+
+1. [Releases](../../releases/latest)에서 `BluePhone-mac.pkg`를 받아 엽니다. 하나의 파일에 Apple Silicon · Intel 판이 함께 들어 있어 Mac에 맞는 것이 설치됩니다.
+2. 아직 Apple 공증을 받지 않은 설치 파일이라 처음에는 "확인되지 않은 개발자" 안내가 뜹니다.
+   - Finder에서 `BluePhone-mac.pkg`를 **Control 키를 누른 채 클릭 → 열기 → 열기**, 또는
+   - **시스템 설정 › 개인정보 보호 및 보안** 아래쪽의 *"BluePhone-mac.pkg"이(가) 차단되었습니다* 옆 **확인 없이 열기**를 누릅니다.
+3. 설치가 끝나면 **응용 프로그램 › 파란전화기**가 실행됩니다. 메뉴 막대(오른쪽 위)에 전화기 아이콘이 생깁니다.
+4. **로컬 네트워크** 접근을 물으면 *허용*을 눌러 주세요(동료 검색에 필요). 방화벽을 켜 두었다면 *들어오는 연결 허용*을 눌러 주세요.
+
+맥 판의 차이: 단축키는 ⌘ 기준(⌘Enter 보내기, ⌘, 설정), 화면 캡처는 ⌃⌥S, 자동 실행은 *설정 › 시작 › 로그인할 때 실행*, 데이터는 `~/Library/Application Support/BluePhone`에 저장됩니다.
+업데이트는 새 설치 파일을 받아 SHA-256 검증 후 설치 프로그램을 열어 줍니다(설치가 끝나면 다시 실행).
 
 ### "알 수 없는 게시자" 경고에 대해
 
@@ -148,7 +161,7 @@ irm https://raw.githubusercontent.com/kms6402-collab/bluephone/main/install.ps1 
 
 | 내용 | 위치 |
 |---|---|
-| 설정 · 쪽지 기록 · 동료 목록 · 프로필 사진 | `%APPDATA%\BluePhone` |
+| 설정 · 쪽지 기록 · 동료 목록 · 프로필 사진 | `%APPDATA%\BluePhone` (macOS: `~/Library/Application Support/BluePhone`) |
 | 받은 파일 | `다운로드\파란전화기` (설정에서 변경) |
 
 `--data <폴더>` 인수로 실행하면 설정과 기록을 그 폴더에 따로 둡니다. USB 같은 포터블 환경에서 쓰거나, 한 PC에서 두 개를 띄워 시험할 때 유용합니다.
@@ -165,6 +178,15 @@ powershell -ExecutionPolicy Bypass -File tools\build.ps1   # → 파란전화기
 
 아이콘을 바꾸려면 `tools\make-icon.ps1`을 고친 뒤 실행하세요(`src\app.ico` 생성).
 
+**macOS 판** ([Avalonia](https://avaloniaui.net/) 11 · .NET 8): 통신 · 암호 · 저장 · 텔레그램 코드는 `src/`의 파일을 그대로 함께 쓰고 화면만 `mac/`에 따로 있습니다.
+
+```bash
+dotnet build mac/BluePhone.Mac.csproj            # 어느 OS에서나 빌드 확인 (Windows에서도 실행해 볼 수 있음)
+bash mac/packaging/build-pkg.sh 2.5.0            # macOS에서: dist/BluePhone-mac.pkg 생성
+```
+
+Apple 인증서가 있으면 Secrets에 `MAC_CERT_P12_BASE64` · `MAC_CERT_PASSWORD` · `MAC_APP_IDENTITY` · `MAC_INSTALLER_IDENTITY`(+ 공증용 `APPLE_ID` · `APPLE_TEAM_ID` · `APPLE_APP_PASSWORD`)를 등록하면 릴리스 때 Developer ID 서명 · 공증까지 합니다. 없으면 ad-hoc 서명으로 만듭니다.
+
 ## 새 버전 내기 (관리자용)
 
 1. `CHANGELOG.md` 맨 위에 `## [2.3.0] - 날짜` 항목과 변경 사항을 적습니다.
@@ -174,7 +196,7 @@ powershell -ExecutionPolicy Bypass -File tools\build.ps1   # → 파란전화기
    git tag v2.3.0
    git push origin main --tags
    ```
-4. GitHub Actions가 자동으로 빌드하고, CHANGELOG의 해당 항목을 노트로 붙여 릴리스를 만듭니다. 사용 중인 모든 파란전화기가 이 릴리스를 보고 업데이트합니다.
+4. GitHub Actions가 자동으로 빌드하고, CHANGELOG의 해당 항목을 노트로 붙여 릴리스를 만듭니다. 이어서 macOS 러너가 `BluePhone-mac.pkg`를 만들어 같은 릴리스에 올립니다. 사용 중인 모든 파란전화기가 이 릴리스를 보고 업데이트합니다.
 
 ## 구조
 
@@ -191,6 +213,8 @@ src/
   Store.cs           설정 · 기록 저장
   *Window.xaml       메인 / 쪽지 쓰기 / 받은 쪽지 / 설정 / 업데이트 창
   Theme.xaml         색상 · 버튼 · 입력칸 · 메뉴 스타일
+mac/                 macOS 판 화면 (Avalonia) — src 의 통신 · 저장 코드를 함께 씀
+  packaging/         Info.plist · 설치 파일 구성(distribution.xml) · build-pkg.sh
 install.ps1          한 줄 설치 스크립트 (보안 경고 없이 설치)
 tools/               빌드 · 아이콘 생성 스크립트
 .github/workflows/   빌드 확인(build.yml), 릴리스 발행(release.yml)

@@ -1,0 +1,16 @@
+#!/bin/sh
+# 설치가 끝나면 (자동 업데이트 포함) 로그인한 사용자 화면에서 파란전화기를 다시 실행한다
+APP="/Applications/파란전화기.app"
+[ -d "$APP" ] || exit 0
+xattr -dr com.apple.quarantine "$APP" >/dev/null 2>&1 || true
+
+CONSOLE_USER=$(stat -f%Su /dev/console 2>/dev/null)
+if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = "root" ] || [ "$CONSOLE_USER" = "loginwindow" ]; then
+  exit 0
+fi
+CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null) || exit 0
+# 이미 떠 있는(업데이트 전) 프로세스가 완전히 끝날 때까지 잠시 기다림
+i=0
+while pgrep -x BluePhone >/dev/null 2>&1 && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done
+launchctl asuser "$CONSOLE_UID" sudo -u "$CONSOLE_USER" /usr/bin/open "$APP" >/dev/null 2>&1 || true
+exit 0

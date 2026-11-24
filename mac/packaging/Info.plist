@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>ko</string>
+  <key>CFBundleExecutable</key>
+  <string>BluePhone</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.bluephone.messenger</string>
+  <key>CFBundleName</key>
+  <string>파란전화기</string>
+  <key>CFBundleDisplayName</key>
+  <string>파란전화기</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>__VERSION__</string>
+  <key>CFBundleVersion</key>
+  <string>__VERSION__</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>12.0</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.business</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
+  <true/>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>같은 네트워크의 동료를 찾고 쪽지 · 대화 · 파일을 주고받기 위해 로컬 네트워크를 사용합니다.</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>© 2026 파란전화기</string>
+</dict>
+</plist>

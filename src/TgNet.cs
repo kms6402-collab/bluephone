@@ -65,7 +65,11 @@ namespace BluePhone
 
         public static string RouteLabel(string r) => r switch
         {
+#if MAC
+            "system" => "macOS 기본(시스템 프록시)",
+#else
             "system" => "Windows 기본(시스템 프록시)",
+#endif
             "direct" => "직접 연결",
             "http" => "HTTP 프록시",
             "socks5" => "SOCKS5 프록시",
@@ -470,6 +474,50 @@ namespace BluePhone
     /// <summary>비밀번호 저장 (Windows 계정으로 암호화 — 이 PC · 이 계정에서만 풀 수 있음)</summary>
     public static class Secret
     {
+#if MAC
+        // macOS: 이 사용자만 읽을 수 있는 키 파일(데이터 폴더 · 권한 600)로 AES 암호화
+        static byte[] Key()
+        {
+            var path = Path.Combine(Store.Dir, ".key");
+            try
+            {
+                if (File.Exists(path)) { var k = File.ReadAllBytes(path); if (k.Length == 32) return k; }
+                var key = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+                File.WriteAllBytes(path, key);
+                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                return key;
+            }
+            catch { return null; }
+        }
+
+        public static string Protect(string plain)
+        {
+            if (string.IsNullOrEmpty(plain)) return "";
+            try
+            {
+                var key = Key(); if (key == null) return "";
+                using var aes = System.Security.Cryptography.Aes.Create();
+                aes.Key = key; aes.GenerateIV();
+                var ct = aes.EncryptCbc(Encoding.UTF8.GetBytes(plain), aes.IV);
+                return "mk:" + Convert.ToBase64String(aes.IV.Concat(ct).ToArray());
+            }
+            catch { return ""; }
+        }
+
+        public static string Unprotect(string stored)
+        {
+            if (string.IsNullOrEmpty(stored) || !stored.StartsWith("mk:")) return "";
+            try
+            {
+                var key = Key(); if (key == null) return "";
+                var b = Convert.FromBase64String(stored.Substring(3));
+                using var aes = System.Security.Cryptography.Aes.Create();
+                aes.Key = key;
+                return Encoding.UTF8.GetString(aes.DecryptCbc(b.AsSpan(16).ToArray(), b.AsSpan(0, 16).ToArray()));
+            }
+            catch { return ""; }
+        }
+#else
         public static string Protect(string plain)
         {
             if (string.IsNullOrEmpty(plain)) return "";
@@ -491,5 +539,6 @@ namespace BluePhone
             }
             catch { return ""; }
         }
+#endif
     }
 }

@@ -4,7 +4,13 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Web.Script.Serialization;
+#if MAC
+using Avalonia.Media;
+using Brush = Avalonia.Media.IBrush;
+using ImageSource = Avalonia.Media.Imaging.Bitmap;
+#else
 using System.Windows.Media;
+#endif
 
 namespace BluePhone
 {
@@ -50,10 +56,14 @@ namespace BluePhone
 
     public static class Palette
     {
-        static SolidColorBrush B(uint argb)
+        static Brush B(uint argb)
         {
+#if MAC
+            return new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
+#else
             var b = new SolidColorBrush(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
             b.Freeze(); return b;
+#endif
         }
         public static readonly Brush Online = B(0xFF1FA971), Away = B(0xFFE0A100), Busy = B(0xFFE5484D), Offline = B(0xFFB9BFC8);
 

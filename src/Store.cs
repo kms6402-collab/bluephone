@@ -10,8 +10,15 @@ namespace BluePhone
     /// <summary>설정 · 연락처 · 대화기록 영구 저장 (%APPDATA%\BluePhone)</summary>
     public static class Store
     {
+#if MAC
+        /// <summary>macOS: ~/Library/Application Support/BluePhone</summary>
+        public static string Dir { get; private set; } = OperatingSystem.IsMacOS()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support", "BluePhone")
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BluePhone");
+#else
         public static string Dir { get; private set; } = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BluePhone");
+#endif
 
         /// <summary>--data 로 별도 데이터 폴더를 쓰는 중인지 (포터블/테스트용 분리 실행)</summary>
         public static bool CustomDir { get; private set; }

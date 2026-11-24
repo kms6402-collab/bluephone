@@ -6,8 +6,10 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+#if !MAC
 using System.Windows;
 using System.Windows.Threading;
+#endif
 
 namespace BluePhone
 {
@@ -33,7 +35,11 @@ namespace BluePhone
         public string State { get; private set; } = "";
         public event Action StateChanged;
 
+#if MAC
+        static UiDispatcher UI => UiDispatcher.Instance;
+#else
         static Dispatcher UI => Application.Current.Dispatcher;
+#endif
         AppSettings S => _core.Settings;
 
         public TelegramBridge(Core core)

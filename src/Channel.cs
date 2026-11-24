@@ -34,8 +34,7 @@ namespace BluePhone
         /// <summary>클라이언트: 암호 연결 시도. 상대가 구버전이면 null</summary>
         public static async Task<Channel> ConnectSecure(Stream s)
         {
-            using var ecdh = new ECDiffieHellmanCng(256);
-            var myPub = ecdh.PublicKey.ToByteArray();
+            using var ecdh = NewKey(out var myPub);
             var ch = new Channel(s);
             await ch.SendJson(new Packet { ["app"] = NetService.AppTag, ["t"] = "hs", ["v"] = 1, ["pub"] = Convert.ToBase64String(myPub) });
             var resp = await ch.RecvJson();
@@ -54,12 +53,53 @@ namespace BluePhone
             var p = await ch.RecvJson();
             if (p == null || NetService.Str(p, "t") != "hs") return (ch, p);
 
-            using var ecdh = new ECDiffieHellmanCng(256);
-            var myPub = ecdh.PublicKey.ToByteArray();
+            using var ecdh = NewKey(out var myPub);
             var theirs = Convert.FromBase64String(NetService.Str(p, "pub") ?? "");
             await ch.SendJson(new Packet { ["app"] = NetService.AppTag, ["ok"] = true, ["pub"] = Convert.ToBase64String(myPub) });
             ch.Derive(ecdh, myPub, theirs, client: false);
             return (ch, await ch.RecvJson());
+        }
+
+#if MAC
+        // 이식형 ECDH: 공개키는 Windows CNG 의 EccPublicBlob 과 같은 모양("ECK1" + 32 + X + Y)으로 주고받고,
+        // 공유 키는 CNG 의 Hash(SHA-256) 방식과 같은 SHA256(Z) 로 만든다 → Windows 판과 그대로 암호 연결됨
+        const int EccMagicP256 = 0x314B4345;   // BCRYPT_ECDH_PUBLIC_P256_MAGIC
+
+        static ECDiffieHellman NewKey(out byte[] pub)
+        {
+            var e = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+            var q = e.ExportParameters(false).Q;
+            pub = new byte[8 + 64];
+            Buffer.BlockCopy(BitConverter.GetBytes(EccMagicP256), 0, pub, 0, 4);
+            Buffer.BlockCopy(BitConverter.GetBytes(32), 0, pub, 4, 4);
+            Buffer.BlockCopy(Pad32(q.X), 0, pub, 8, 32);
+            Buffer.BlockCopy(Pad32(q.Y), 0, pub, 40, 32);
+            return e;
+        }
+
+        static byte[] Pad32(byte[] b)
+        {
+            if (b.Length == 32) return b;
+            var r = new byte[32];
+            Buffer.BlockCopy(b, Math.Max(0, b.Length - 32), r, Math.Max(0, 32 - b.Length), Math.Min(32, b.Length));
+            return r;
+        }
+
+        void Derive(ECDiffieHellman ecdh, byte[] myPub, byte[] theirPub, bool client)
+        {
+            if (theirPub == null || theirPub.Length != 72 || BitConverter.ToInt32(theirPub, 0) != EccMagicP256 || BitConverter.ToInt32(theirPub, 4) != 32)
+                throw new CryptographicException("지원하지 않는 공개키 형식");
+            var x = new byte[32]; var y = new byte[32];
+            Buffer.BlockCopy(theirPub, 8, x, 0, 32);
+            Buffer.BlockCopy(theirPub, 40, y, 0, 32);
+            using var other = ECDiffieHellman.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, Q = new ECPoint { X = x, Y = y } });
+            var shared = ecdh.DeriveKeyFromHash(other.PublicKey, HashAlgorithmName.SHA256);
+#else
+        static ECDiffieHellmanCng NewKey(out byte[] pub)
+        {
+            var e = new ECDiffieHellmanCng(256);
+            pub = e.PublicKey.ToByteArray();
+            return e;
         }
 
         void Derive(ECDiffieHellmanCng ecdh, byte[] myPub, byte[] theirPub, bool client)
@@ -68,6 +108,7 @@ namespace BluePhone
             ecdh.KeyDerivationFunction = ECDiffieHellmanKeyDerivationFunction.Hash;
             ecdh.HashAlgorithm = CngAlgorithm.Sha256;
             var shared = ecdh.DeriveKeyMaterial(other);
+#endif
             // 두 공개키를 정해진 순서로 섞어 세션 키 유도
             var c = client ? myPub : theirPub;
             var sv = client ? theirPub : myPub;

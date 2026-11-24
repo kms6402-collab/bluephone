@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    파란전화기 macOS 판 (Avalonia).
+    통신 · 저장 · 텔레그램 코드는 Windows 판(src)과 같은 파일을 함께 쓰고(MAC 기호로 분기),
+    화면만 Avalonia 로 새로 만든다. → Windows 판과 서로 쪽지 · 대화 · 파일이 오간다.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>BluePhone</AssemblyName>
+    <RootNamespace>BluePhone</RootNamespace>
+    <DefineConstants>$(DefineConstants);MAC</DefineConstants>
+    <!-- 버전: 로컬 빌드 기본값. GitHub Actions 는 태그에서 -p:Version 으로 덮어씀 -->
+    <Version>2.5.0</Version>
+    <Company>BluePhone</Company>
+    <Product>파란전화기</Product>
+    <Copyright>© 2026 파란전화기</Copyright>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>ko</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- HttpWebRequest(텔레그램 기본 경로) · 플랫폼 분기 경고 -->
+    <NoWarn>$(NoWarn);SYSLIB0014;CA1416;CS0618;CS8632</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.23" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.23" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.23" />
+  </ItemGroup>
+
+  <!-- Windows 판과 같은 파일 (프로토콜 · 암호 · 저장 형식 · 텔레그램) -->
+  <ItemGroup>
+    <Compile Include="..\src\Models.cs" Link="Shared\Models.cs" />
+    <Compile Include="..\src\Store.cs" Link="Shared\Store.cs" />
+    <Compile Include="..\src\Net.cs" Link="Shared\Net.cs" />
+    <Compile Include="..\src\Channel.cs" Link="Shared\Channel.cs" />
+    <Compile Include="..\src\Telegram.cs" Link="Shared\Telegram.cs" />
+    <Compile Include="..\src\TgMenu.cs" Link="Shared\TgMenu.cs" />
+    <Compile Include="..\src\TgNet.cs" Link="Shared\TgNet.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\CHANGELOG.md" LogicalName="CHANGELOG.md" />
+    <EmbeddedResource Include="..\src\emoji\list.txt" LogicalName="emoji/list.txt" />
+    <EmbeddedResource Include="packaging\AppIcon-1024.png" LogicalName="AppIcon.png" />
+  </ItemGroup>
+</Project>
