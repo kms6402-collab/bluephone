@@ -14,7 +14,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 OUT="$ROOT/dist"
 WORK="$ROOT/mac/obj/pkg"
-APP_NAME="파란전화기.app"
+# macOS(Finder)가 쓰는 NFD(자모 분리) 형태로 이름을 만들어야 pkgbuild 가 번들 경로를 찾는다
+APP_NAME="$(python3 -c 'import unicodedata; print(unicodedata.normalize("NFD", "파란전화기.app"))')"
 PKG="$OUT/BluePhone-mac.pkg"
 
 rm -rf "$WORK"

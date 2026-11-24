@@ -119,11 +119,13 @@ jobs:
 
       - name: Self test (published app + installed pkg)
         run: |
-          "mac/obj/pkg/stage-arm64/파란전화기.app/Contents/MacOS/BluePhone" --selftest
+          mac/obj/pkg/stage-arm64/*.app/Contents/MacOS/BluePhone --selftest
           sudo installer -pkg dist/BluePhone-mac.pkg -target /
-          ls "/Applications/파란전화기.app/Contents/MacOS/BluePhone"
-          file "/Applications/파란전화기.app/Contents/MacOS/BluePhone"
-          "/Applications/파란전화기.app/Contents/MacOS/BluePhone" --selftest
+          APP=$(for a in /Applications/*.app; do [ -x "$a/Contents/MacOS/BluePhone" ] && echo "$a"; done | head -1)
+          echo "설치됨: $APP"
+          test -n "$APP"
+          file "$APP/Contents/MacOS/BluePhone"
+          "$APP/Contents/MacOS/BluePhone" --selftest
           pkill -x BluePhone || true
 
       - name: Upload to release
