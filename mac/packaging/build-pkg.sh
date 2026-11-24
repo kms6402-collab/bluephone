@@ -37,7 +37,8 @@ sign_app() {
     id="$MAC_APP_IDENTITY"
     opts=(--timestamp --options runtime --entitlements "$HERE/entitlements.plist")
   fi
-  find "$app/Contents/MacOS" -type f -print0 | while IFS= read -r -d '' f; do
+  # 주 실행 파일(BluePhone)은 맨 마지막에 번들 서명으로 (먼저 서명하면 아직 서명 안 된 파일 때문에 실패)
+  find "$app/Contents/MacOS" -type f ! -path "$app/Contents/MacOS/BluePhone" -print0 | while IFS= read -r -d '' f; do
     codesign --force ${opts[@]+"${opts[@]}"} -s "$id" "$f"
   done
   codesign --force ${opts[@]+"${opts[@]}"} -s "$id" "$app"
