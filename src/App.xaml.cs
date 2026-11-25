@@ -588,7 +588,7 @@ namespace BluePhone
 
         /// <summary>쪽지 보내기. at 을 주면 예약, 받지 못한 동료에게는 접속할 때 다시 보냄</summary>
         public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false, DateTime? at = null, bool chat = false,
-                                            ChatRoom room = null, string sys = null)
+                                            ChatRoom room = null, string sys = null, Action<ChatMessage> prep = null)
         {
             bool one = to.Count == 1 && room == null;
             var m = new ChatMessage
@@ -611,6 +611,7 @@ namespace BluePhone
                 To = to.Select(p => p.DisplayName).ToList(),
                 ToIds = to.Select(p => p.Id).ToList(),
             };
+            prep?.Invoke(m);
             foreach (var f in files ?? new List<string>())
             {
                 var fi = new FileInfo(f);
@@ -807,12 +808,15 @@ namespace BluePhone
             if (m.IsSys) m.Read = true;   // 초대 · 나감 알림 줄은 안 읽은 수에 넣지 않음
             History.Insert(0, m);
             Store.AppendHistory(m);
-            if (m.IsSys) return;
-            AutoFetchImages(m);
-            Telegram?.Forward(m, _status);
-            peer.HasUnread = true;
-            UnreadChanged?.Invoke();
-            UpdateTray();
+            if (m.IsSys && !m.InvitesMe) return;   // 나감 · 이름 변경 · 다른 사람 초대는 알림 없이 대화방 안에만
+            if (!m.IsSys)
+            {
+                AutoFetchImages(m);
+                Telegram?.Forward(m, _status);
+                peer.HasUnread = true;
+                UnreadChanged?.Invoke();
+                UpdateTray();
+            }
 
             bool dnd = _status == Status.Dnd && !m.Urgent;
             // 그 동료와의 대화 창을 보고 있으면 팝업 없이 바로 읽음 처리
@@ -820,7 +824,7 @@ namespace BluePhone
             if (m.Chat && key != null) _chats.TryGetValue(key, out chat);
             if (chat != null && chat.IsActive && chat.WindowState != WindowState.Minimized && !m.Urgent)
             {
-                MarkRead(m);
+                if (!m.IsSys) MarkRead(m);
             }
             else if (!dnd)
             {
@@ -1080,7 +1084,7 @@ namespace BluePhone
             // 대화 알림은 5초 뒤 바로 사라짐(대화 창에서 이어서 봄)
             if (!activate && !m.Urgent && !m.Outgoing)
             {
-                int secs = m.Chat && !reminder ? Settings.ChatAlertAutoClose : Settings.PopupAutoClose;
+                int secs = m.Chat && !reminder && !m.MentionsMe && !m.InvitesMe ? Settings.ChatAlertAutoClose : Settings.PopupAutoClose;
                 if (secs > 0) w.StartAutoClose(secs);
             }
         }

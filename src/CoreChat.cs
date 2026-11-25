@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 #if MAC
 using Avalonia.Threading;
@@ -74,6 +75,11 @@ namespace BluePhone
             foreach (var p in peers.Where(p => p != null && p.Id != Settings.Id).GroupBy(p => p.Id).Select(g => g.First())) room.Members.Add(MemberOf(p));
             Settings.Rooms.Add(room);
             SaveRooms();
+            // 초대받은 동료에게 알림 (그 대화방으로)
+            var others = room.Others.ToList();
+            if (others.Count > 0)
+                _ = SendRoom(room, $"{Settings.Name}님이 {string.Join(", ", others.Select(m => m.Name + "님"))}을 초대했습니다.", null, false,
+                             sys: "invite", invited: others.Select(m => m.Id).ToList());
             return room;
         }
 
@@ -100,10 +106,15 @@ namespace BluePhone
             return list;
         }
 
-        public Task<ChatMessage> SendRoom(ChatRoom r, string text, IList<string> files, bool urgent, DateTime? at = null, string sys = null)
+        public Task<ChatMessage> SendRoom(ChatRoom r, string text, IList<string> files, bool urgent, DateTime? at = null, string sys = null, IList<string> invited = null)
         {
             r.Left = false;
-            return Send(RoomPeers(r), text, files, urgent, false, at: at, chat: true, room: r, sys: sys);
+            var mentions = sys == null ? MentionIds(r, text) : new List<string>();
+            return Send(RoomPeers(r), text, files, urgent, false, at: at, chat: true, room: r, sys: sys, prep: m =>
+            {
+                if (mentions.Count > 0) m.Mentions = mentions;
+                if (invited != null && invited.Count > 0) m.Invited = invited.ToList();
+            });
         }
 
         /// <summary>대화방에 동료 초대</summary>
@@ -114,7 +125,7 @@ namespace BluePhone
             foreach (var p in add) r.Members.Add(MemberOf(p));
             SaveRooms();
             var names = string.Join(", ", add.Select(p => p.DisplayName + "님"));
-            await SendRoom(r, $"{Settings.Name}님이 {names}을 초대했습니다.", null, false, sys: "invite");
+            await SendRoom(r, $"{Settings.Name}님이 {names}을 초대했습니다.", null, false, sys: "invite", invited: add.Select(p => p.Id).ToList());
         }
 
         public async Task RenameRoom(ChatRoom r, string name)
@@ -146,6 +157,10 @@ namespace BluePhone
             m.Room = id;
             var sys = NetService.Str(p, "sys");
             m.Sys = string.IsNullOrEmpty(sys) ? null : sys;
+            var men = NetService.StrList(p, "mentions");
+            if (men.Count > 0) m.Mentions = men;
+            var inv = NetService.StrList(p, "invited");
+            if (inv.Count > 0) m.Invited = inv;
             var r = RoomOf(id);
             var mems = NetService.ObjList(p, "members").Select(x => new RoomMember
             {
@@ -192,6 +207,8 @@ namespace BluePhone
             var r = RoomOf(m.Room);
             packet["room"] = m.Room;
             if (m.IsSys) packet["sys"] = m.Sys;
+            if (m.Mentions != null && m.Mentions.Count > 0) packet["mentions"] = m.Mentions;
+            if (m.Invited != null && m.Invited.Count > 0) packet["invited"] = m.Invited;
             if (r == null) return;
             packet["roomName"] = r.Name ?? "";
             packet["members"] = r.Members.Select(x =>
@@ -205,6 +222,46 @@ namespace BluePhone
                     ["port"] = x.Id == Settings.Id ? Settings.Port : peer?.Port ?? x.Port,
                 };
             }).ToList();
+        }
+
+        // ───────────────────────── @ 부르기 ─────────────────────────
+
+        /// <summary>'@검색어'에 맞는 대화방 구성원 (구성원이 둘 이상이면 맨 위에 '모두')</summary>
+        public List<MentionPick> MentionCandidates(ChatRoom r, string q)
+        {
+            var list = new List<MentionPick>();
+            if (r == null) return list;
+            q = (q ?? "").Trim();
+            bool Match(string n) => !string.IsNullOrEmpty(n) && (q.Length == 0 || n.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0);
+            var others = r.Others.ToList();
+            if (others.Count > 1 && Match(Mention.AllName)) list.Add(new MentionPick { Id = Mention.All, Name = Mention.AllName, Sub = "대화방의 모든 사람" });
+            foreach (var mem in others)
+            {
+                var p = Peers.FirstOrDefault(x => x.Id == mem.Id);
+                var name = Mention.Clean(p?.DisplayName ?? mem.Name);
+                if (name.Length == 0 || !(Match(name) || Match(p?.Name) || Match(mem.Name))) continue;
+                list.Add(new MentionPick { Id = mem.Id, Name = name, Sub = p?.Dept ?? "" });
+            }
+            return list;
+        }
+
+        /// <summary>글 안에서 '@이름'으로 부른 구성원 ID</summary>
+        public List<string> MentionIds(ChatRoom r, string text)
+        {
+            var ids = new List<string>();
+            if (r == null || string.IsNullOrEmpty(text) || text.IndexOf('@') < 0) return ids;
+            bool Has(string n)
+            {
+                n = Mention.Clean(n);
+                return n.Length > 0 && Regex.IsMatch(text, @"(^|\s)@" + Regex.Escape(n));
+            }
+            if (Has(Mention.AllName)) ids.Add(Mention.All);
+            foreach (var mem in r.Others)
+            {
+                var p = Peers.FirstOrDefault(x => x.Id == mem.Id);
+                if (Has(p?.DisplayName) || Has(p?.Name) || Has(mem.Name)) ids.Add(mem.Id);
+            }
+            return ids;
         }
 
         // ───────────────────────── 입력 중 ─────────────────────────
@@ -326,6 +383,9 @@ namespace BluePhone
             MarkChatRead(key);
             foreach (var m in History.Where(x => !x.Outgoing && x.Files.Count > 0 && InChat(x, key)).Take(30).ToList()) AutoFetchImages(m);
         }
+
+        /// <summary>점검용: 떠 있는 알림 창 (제목 · 열쇠)</summary>
+        internal IEnumerable<string> PopupInfo => _popups.Select(w => $"[{w.Title}] key={KeyOf(w.Message) ?? "-"} text={w.Message.Text}");
 
         /// <summary>메시지가 속한 대화 창 열기 (그룹 메시지는 그 방, 1:1 은 그 동료)</summary>
         public ChatWindow OpenChatFor(ChatMessage m)

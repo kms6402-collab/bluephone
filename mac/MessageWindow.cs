@@ -41,7 +41,7 @@ namespace BluePhone
             {
                 _chatAlert = value;
                 if (!value) return;
-                if (!Message.Urgent) SetTag(Message.Room != null ? "그룹 대화" : "1:1 대화", "Accent", "AccentSoft");
+                if (!Message.Urgent) SetTag(Message.MentionsMe ? "나를 언급" : Message.InvitesMe ? "대화 초대" : Message.Room != null ? "그룹 대화" : "1:1 대화", "Accent", "AccentSoft");
                 _replyText.Text = "대화 열기";
                 _chatBtn.IsVisible = false;
                 if (_privacy < 2) Title = (Message.FromName ?? "") + (Message.Room != null ? "님 · " + (_core.RoomOf(Message.Room)?.Title ?? "그룹 대화") : "님의 대화");

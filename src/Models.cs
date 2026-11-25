@@ -194,6 +194,14 @@ namespace BluePhone
         /// <summary>그룹 대화방의 알림 줄 종류 (invite · leave · rename). 말풍선 대신 가운데 작은 글씨로</summary>
         public string Sys { get; set; }
         [ScriptIgnore] public bool IsSys => !string.IsNullOrEmpty(Sys);
+        /// <summary>@로 부른 사람 ID (모두는 "all"). 없으면 null</summary>
+        public List<string> Mentions { get; set; }
+        /// <summary>초대 알림(sys=invite)으로 새로 들어온 사람 ID</summary>
+        public List<string> Invited { get; set; }
+        /// <summary>받은 메시지에서 나를 @로 불렀는가</summary>
+        [ScriptIgnore] public bool MentionsMe => !Outgoing && Mentions != null && (Mentions.Contains(Mention.All) || Mentions.Contains(ChatRoom.MyId));
+        /// <summary>나를 대화방에 초대한 알림인가</summary>
+        [ScriptIgnore] public bool InvitesMe => !Outgoing && Sys == "invite" && Invited != null && Invited.Contains(ChatRoom.MyId);
         [ScriptIgnore] public bool IsRoom => Room != null;
         /// <summary>그룹 대화방에서 받은 메시지 — 말풍선 위에 보낸 사람 이름</summary>
         [ScriptIgnore] public bool ShowSender => Room != null && !Outgoing && !IsSys;
@@ -422,6 +430,8 @@ namespace BluePhone
         public int Count { get; set; }
         /// <summary>"OO님이 입력 중…" (없으면 null)</summary>
         public string Typing { get; set; }
+        /// <summary>안 읽은 메시지 중에 나를 @로 부른 것이 있음</summary>
+        public bool Mentioned { get; set; }
         /// <summary>대화 창 · 입력 중 표시에 쓰는 열쇠 (1:1 은 동료 ID, 그룹은 room:방ID)</summary>
         public string Key => Room != null ? Typists.RoomKey(Room.Id) : PeerId;
         public bool IsRoom => Room != null;
@@ -432,7 +442,7 @@ namespace BluePhone
         public Brush AvatarBrush => Palette.Avatar(Room != null ? "room:" + Room.Id : PeerId ?? Name);
         public ImageSource AvatarImage => Room != null || PeerId == null ? null : AvatarStore.Get(PeerId);
         public Brush StatusBrush => Room != null ? null : Peer?.StatusBrush ?? Status.Brush(Status.Offline);
-        public string Preview => Typing ?? (Last == null ? "" : Last.IsSys ? Last.Text : (Last.Outgoing ? "나: " : Room != null ? Last.FromName + ": " : "") + Last.Preview);
+        public string Preview => Typing ?? (Mentioned ? "[나를 언급] " : "") + (Last == null ? "" : Last.IsSys ? Last.Text : (Last.Outgoing ? "나: " : Room != null ? Last.FromName + ": " : "") + Last.Preview);
         public string TimeText => Last?.TimeText ?? "";
         public bool HasUnread => Unread > 0;
         public string UnreadText => Unread > 99 ? "99+" : Unread.ToString();
@@ -496,5 +506,56 @@ namespace BluePhone
     {
         public string Id { get; set; }
         public string Name { get; set; }
+    }
+
+    /// <summary>@ 부르기 목록의 한 줄</summary>
+    public sealed class MentionPick
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Sub { get; set; }
+        public string Initial => string.IsNullOrEmpty(Name) ? "?" : Id == Mention.All ? "@" : Name.Substring(0, 1);
+    }
+
+    /// <summary>카카오톡처럼 '@이름'으로 대화방의 동료 부르기</summary>
+    public static class Mention
+    {
+        public const string All = "all";
+        public const string AllName = "모두";
+
+        /// <summary>이름 속 빈칸은 붙여 씀 ('@홍 길동' 대신 '@홍길동' — 빈칸에서 부르기가 끝나므로)</summary>
+        public static string Clean(string name) => string.IsNullOrWhiteSpace(name) ? "" : string.Concat(name.Where(c => !char.IsWhiteSpace(c) && c != '@'));
+
+        /// <summary>커서 바로 앞이 '@검색어'면 '@' 위치 (아니면 -1)</summary>
+        public static int Find(string text, int caret, out string query)
+        {
+            query = null;
+            if (string.IsNullOrEmpty(text) || caret <= 0 || caret > text.Length) return -1;
+            for (int i = caret - 1; i >= 0 && caret - i <= 21; i--)
+            {
+                char c = text[i];
+                if (c == '@')
+                {
+                    if (i > 0 && !char.IsWhiteSpace(text[i - 1])) return -1;   // 메일 주소 등
+                    query = text.Substring(i + 1, caret - i - 1);
+                    return i;
+                }
+                if (char.IsWhiteSpace(c)) return -1;
+            }
+            return -1;
+        }
+
+        /// <summary>'@검색어'를 '@이름 '으로 바꾼 글과 새 커서 위치</summary>
+        public static string Insert(string text, int at, int caret, string name, out int newCaret)
+        {
+            var ins = "@" + name + " ";
+            var rest = text.Substring(caret);
+            if (rest.StartsWith(" ")) rest = rest.Substring(1);
+            newCaret = at + ins.Length;
+            return text.Substring(0, at) + ins + rest;
+        }
+
+        /// <summary>말풍선 글자에서 '@이름' 조각 (강조 표시용)</summary>
+        public static readonly System.Text.RegularExpressions.Regex Rx = new System.Text.RegularExpressions.Regex(@"(?<=^|\s)@[^\s@]{1,20}", System.Text.RegularExpressions.RegexOptions.Compiled);
     }
 }

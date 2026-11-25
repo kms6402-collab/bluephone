@@ -14,7 +14,7 @@
     <RootNamespace>BluePhone</RootNamespace>
     <DefineConstants>$(DefineConstants);MAC</DefineConstants>
     <!-- 버전: 로컬 빌드 기본값. GitHub Actions 는 태그에서 -p:Version 으로 덮어씀 -->
-    <Version>2.6.0</Version>
+    <Version>2.7.0</Version>
     <Company>BluePhone</Company>
     <Product>파란전화기</Product>
     <Copyright>© 2026 파란전화기</Copyright>

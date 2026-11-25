@@ -110,6 +110,7 @@ namespace BluePhone
                 if (e.Data.GetData(DataFormats.FileDrop) is string[] paths) { AddFiles(paths); e.Handled = true; }
             };
             CaptureBtn.ToolTip = core.Settings.CaptureHotkey ? "화면 캡처 (Ctrl+Alt+S)" : "화면 캡처";
+            InitMention();
         }
 
         /// <summary>머리글에 보일 동료(1:1 상대 또는 방 구성원)의 접속 상태 변화를 지켜봄</summary>
@@ -196,6 +197,7 @@ namespace BluePhone
 
         void Input_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (MentionKey(e)) { e.Handled = true; return; }
             if (Markdown.HandleKey(Input, e, this)) { e.Handled = true; return; }
             if (e.Key == Key.Enter)
             {

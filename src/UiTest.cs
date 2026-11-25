@@ -128,6 +128,55 @@ namespace BluePhone
                     Log($"invited {add.Count} → members={r.Count}");
                     break;
                 }
+                case "mention":
+                {
+                    // 첫 구성원을 '@이름'으로 불러 보내기 (arg 가 all 이면 @모두)
+                    var r = await WaitRoom(core);
+                    var who = arg.StartsWith("all") ? Mention.AllName : core.MentionCandidates(r, "").First(x => x.Id != Mention.All).Name;
+                    var text = "@" + who + " " + (arg.StartsWith("all") ? arg.Substring(3).TrimStart(':') : arg);
+                    var m = await core.SendRoom(r, text, null, false);
+                    Log($"mention sent '{text}' mentions={string.Join(",", m.Mentions ?? new List<string>())}");
+                    break;
+                }
+                case "picker":
+                {
+                    var r = await WaitRoom(core);
+                    var w = core.OpenRoom(r);
+                    await Task.Delay(400);
+                    Log("picker " + w?.TestMention(arg));
+                    break;
+                }
+                case "newroom":
+                {
+                    // 이름을 고른 동료와 새 그룹 대화방
+                    var names = arg.Split(',').Select(x => x.Trim()).ToList();
+                    List<Peer> list = null;
+                    for (int k = 0; k < 80; k++)
+                    {
+                        list = core.Peers.Where(p => p.IsOnline && names.Contains(p.DisplayName)).ToList();
+                        if (list.Count >= names.Count) break;
+                        await Task.Delay(500);
+                    }
+                    var r = core.CreateRoom(list);
+                    core.OpenRoom(r);
+                    Log($"newroom members={r.Count} ({string.Join(",", r.Members.Select(m => m.Name))})");
+                    break;
+                }
+                case "watch":
+                {
+                    // arg ms 동안 새로 뜨는 알림 창을 기록
+                    var seen = new HashSet<string>();
+                    var until = DateTime.Now.AddMilliseconds(int.TryParse(arg, out var wm) ? wm : 20000);
+                    while (DateTime.Now < until)
+                    {
+                        foreach (var s in core.PopupInfo) if (seen.Add(s)) Log("popup+ " + s);
+                        await Task.Delay(300);
+                    }
+                    break;
+                }
+                case "popups":
+                    foreach (var s in core.PopupInfo) Log("popup " + s);
+                    break;
                 case "leave":
                     await core.LeaveRoom(await WaitRoom(core));
                     break;
@@ -152,7 +201,7 @@ namespace BluePhone
                     foreach (var r in core.Settings.Rooms)
                         Log($"room {Short(r.Id)} left={r.Left} title={r.Title} members={string.Join(",", r.Members.Select(m => m.Name))}");
                     foreach (var m in core.History.Where(x => x.Room != null).Take(12))
-                        Log($"  msg {(m.Outgoing ? "→" : "←")} {m.FromName}: {m.Text} sys={m.Sys} read={m.Read} meta={m.Meta}");
+                        Log($"  msg {(m.Outgoing ? "→" : "←")} {m.FromName}: {m.Text} sys={m.Sys} read={m.Read} meta={m.Meta} mentionsMe={m.MentionsMe} invitesMe={m.InvitesMe}");
                     break;
                 }
 #if MAC

@@ -958,6 +958,7 @@ namespace BluePhone
                         Last = last,
                         Count = g.Count(),
                         Unread = g.Count(x => !x.m.Outgoing && !x.m.Read),
+                        Mentioned = g.Any(x => !x.m.Read && x.m.MentionsMe),
                     };
                 }).ToList();
             // 만들었지만 아직 대화가 없는 방도 보이도록

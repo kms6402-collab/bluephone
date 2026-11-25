@@ -497,7 +497,7 @@ namespace BluePhone
         // ───────────────────────── messaging ─────────────────────────
 
         public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false, DateTime? at = null, bool chat = false,
-                                            ChatRoom room = null, string sys = null)
+                                            ChatRoom room = null, string sys = null, Action<ChatMessage> prep = null)
         {
             bool one = to.Count == 1 && room == null;
             var m = new ChatMessage
@@ -520,6 +520,7 @@ namespace BluePhone
                 To = to.Select(p => p.DisplayName).ToList(),
                 ToIds = to.Select(p => p.Id).ToList(),
             };
+            prep?.Invoke(m);
             foreach (var f in files ?? new List<string>())
             {
                 var fi = new FileInfo(f);
@@ -712,19 +713,22 @@ namespace BluePhone
             if (m.IsSys) m.Read = true;   // 초대 · 나감 알림 줄은 안 읽은 수에 넣지 않음
             History.Insert(0, m);
             Store.AppendHistory(m);
-            if (m.IsSys) return;
-            AutoFetchImages(m);
-            Telegram?.Forward(m, _status);
-            peer.HasUnread = true;
-            UnreadChanged?.Invoke();
-            UpdateTray();
+            if (m.IsSys && !m.InvitesMe) return;   // 나감 · 이름 변경 · 다른 사람 초대는 알림 없이 대화방 안에만
+            if (!m.IsSys)
+            {
+                AutoFetchImages(m);
+                Telegram?.Forward(m, _status);
+                peer.HasUnread = true;
+                UnreadChanged?.Invoke();
+                UpdateTray();
+            }
 
             bool dnd = _status == Status.Dnd && !m.Urgent;
             ChatWindow chat = null;
             if (m.Chat && key != null) _chats.TryGetValue(key, out chat);
             if (chat != null && chat.IsActive && chat.WindowState != WindowState.Minimized && !m.Urgent)
             {
-                MarkRead(m);
+                if (!m.IsSys) MarkRead(m);
             }
             else if (!dnd)
             {
@@ -955,7 +959,7 @@ namespace BluePhone
             if (m.Urgent) Native.Attention(true);
             if (!activate && !m.Urgent && !m.Outgoing)
             {
-                int secs = m.Chat && !reminder ? Settings.ChatAlertAutoClose : Settings.PopupAutoClose;
+                int secs = m.Chat && !reminder && !m.MentionsMe && !m.InvitesMe ? Settings.ChatAlertAutoClose : Settings.PopupAutoClose;
                 if (secs > 0) w.StartAutoClose(secs);
             }
         }

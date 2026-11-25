@@ -223,11 +223,24 @@ namespace BluePhone
             int pos = 0;
             foreach (Match m in UrlRx.Matches(text ?? ""))
             {
-                if (m.Index > pos) target.Add(new Run(text.Substring(pos, m.Index - pos)));
+                if (m.Index > pos) AddMentions(target, text.Substring(pos, m.Index - pos));
                 target.Add(Link(m.Value, m.Value));
                 pos = m.Index + m.Length;
             }
-            if (pos < (text ?? "").Length) target.Add(new Run(text.Substring(pos)));
+            if (pos < (text ?? "").Length) AddMentions(target, text.Substring(pos));
+        }
+
+        /// <summary>'@이름'(그룹 대화에서 부른 사람)은 굵게</summary>
+        static void AddMentions(InlineCollection target, string text)
+        {
+            int pos = 0;
+            foreach (Match m in Mention.Rx.Matches(text))
+            {
+                if (m.Index > pos) target.Add(new Run(text.Substring(pos, m.Index - pos)));
+                target.Add(new Run(m.Value) { FontWeight = FontWeights.Bold });
+                pos = m.Index + m.Length;
+            }
+            if (pos < text.Length) target.Add(new Run(text.Substring(pos)));
         }
 
         static DateTime _lastOpen;

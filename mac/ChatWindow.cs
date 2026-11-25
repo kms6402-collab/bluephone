@@ -197,6 +197,7 @@ namespace BluePhone
             _input.AddHandler(KeyDownEvent, Input_KeyDown, RoutingStrategies.Tunnel);
             _files.EnablePaste(_input);
             comp.Children.Add(_input);
+            if (Room != null) comp.Children.Add(BuildMention());
 
             var bar = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
             _emojiBtn = ToolBtn("😊", "이모지 · 이모티콘"); _emojiBtn.Click += (s, e) => Emoji.ShowPicker(_emojiBtn, _input);
@@ -484,8 +485,122 @@ namespace BluePhone
 
         // ───────────────────────── 입력 · 보내기 ─────────────────────────
 
+        // ───────────── @ 부르기 (그룹 대화) ─────────────
+
+        Popup _mentionPop;
+        ListBox _mentionList;
+        int _mentionAt = -1;
+
+        Control BuildMention()
+        {
+            _mentionList = new ListBox { MaxHeight = 236, Focusable = false, Background = Brushes.Transparent };
+            ScrollViewer.SetHorizontalScrollBarVisibility(_mentionList, Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled);
+            // 누르면 고름 (입력칸의 글자 커서를 빼앗지 않도록)
+            _mentionList.AddHandler(PointerPressedEvent, (s, e) =>
+            {
+                for (var v = e.Source as Visual; v != null; v = Avalonia.VisualTree.VisualExtensions.GetVisualParent(v))
+                    if (v is ListBoxItem item) { e.Handled = true; PickMention(item.Tag as MentionPick); return; }
+            }, RoutingStrategies.Tunnel);
+            var head = Ui.Text("대화 상대 부르기", 11.5, fg: "Muted");
+            head.Margin = new Thickness(8, 4, 8, 4);
+            var root = new Border
+            {
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(4), Width = 240,
+                Child = new StackPanel { Children = { head, _mentionList } },
+            };
+            root.Res(Border.BackgroundProperty, "Surface").Res(Border.BorderBrushProperty, "Line");
+            _mentionPop = new Popup
+            {
+                Child = root, PlacementTarget = _input, Placement = PlacementMode.TopEdgeAlignedLeft,
+                IsLightDismissEnabled = false, VerticalOffset = -4,
+            };
+            _input.TextChanged += (s, e) => UpdateMention();
+            _input.PropertyChanged += (s, e) => { if (e.Property == TextBox.CaretIndexProperty && _mentionPop.IsOpen) UpdateMention(); };
+            _input.LostFocus += (s, e) => DispatcherTimer.RunOnce(() => { if (!_input.IsFocused) CloseMention(); }, TimeSpan.FromMilliseconds(250));
+            Deactivated += (s, e) => CloseMention();
+            return _mentionPop;
+        }
+
+        internal string TestMention(string q)
+        {
+            _input.Focus();
+            _input.Text = "확인 부탁 @" + q.TrimStart('!');
+            _input.CaretIndex = _input.Text.Length;
+            UpdateMention();
+            bool open = MentionOpen;
+            var names = open ? string.Join(",", _mentionList.Items.OfType<Control>().Select(x => ((MentionPick)x.Tag).Name)) : "(목록 없음)";
+            if (open && !q.StartsWith("!")) MentionKey(new KeyEventArgs { Key = Key.Enter });
+            return $"open={open} 후보=[{names}] → '{_input.Text}' popupAfter={_mentionPop?.IsOpen == true}";
+        }
+
+        bool MentionOpen => _mentionPop != null && _mentionPop.IsOpen && _mentionList.ItemCount > 0;
+
+        void UpdateMention()
+        {
+            if (Room == null || _mentionPop == null) return;
+            int at = Mention.Find(_input.Text, _input.CaretIndex, out var q);
+            var list = at < 0 ? null : _core.MentionCandidates(Room, q);
+            if (list == null || list.Count == 0) { CloseMention(); return; }
+            _mentionAt = at;
+            _mentionList.Items.Clear();
+            foreach (var p in list.Take(30)) _mentionList.Items.Add(MentionRow(p));
+            _mentionList.SelectedIndex = 0;
+            _mentionPop.IsOpen = true;
+        }
+
+        void CloseMention()
+        {
+            if (_mentionPop != null) _mentionPop.IsOpen = false;
+            _mentionAt = -1;
+        }
+
+        bool MentionKey(KeyEventArgs e)
+        {
+            if (!MentionOpen) return false;
+            int n = _mentionList.ItemCount;
+            switch (e.Key)
+            {
+                case Key.Down: _mentionList.SelectedIndex = (_mentionList.SelectedIndex + 1) % n; _mentionList.ScrollIntoView(_mentionList.SelectedIndex); return true;
+                case Key.Up: _mentionList.SelectedIndex = (_mentionList.SelectedIndex - 1 + n) % n; _mentionList.ScrollIntoView(_mentionList.SelectedIndex); return true;
+                case Key.Enter:
+                case Key.Tab:
+                    if (e.KeyModifiers != KeyModifiers.None) return false;
+                    PickMention((_mentionList.SelectedItem as Control)?.Tag as MentionPick);
+                    return true;
+                case Key.Escape: CloseMention(); return true;
+            }
+            return false;
+        }
+
+        void PickMention(MentionPick p)
+        {
+            var cur = _input.Text ?? "";
+            if (p == null || _mentionAt < 0 || _mentionAt > cur.Length) { CloseMention(); return; }
+            int caret = Math.Max(_mentionAt, Math.Min(_input.CaretIndex, cur.Length));
+            var text = Mention.Insert(cur, _mentionAt, caret, p.Name, out var c);
+            CloseMention();
+            _input.Text = text;
+            _input.CaretIndex = c;
+            _input.Focus();
+        }
+
+        ListBoxItem MentionRow(MentionPick p)
+        {
+            var av = new Avatar { Size = 26, Initial = p.Initial, Fill = p.Id == Mention.All ? null : Palette.Avatar(p.Id), Margin = new Thickness(0, 0, 8, 0) };
+            if (p.Id == Mention.All) av.Res(Avatar.FillProperty, "Accent");
+            var txt = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            txt.Children.Add(Ui.Text(p.Name, 13, FontWeight.SemiBold, trim: true));
+            if (!string.IsNullOrWhiteSpace(p.Sub)) txt.Children.Add(Ui.Text(p.Sub, 11, fg: "Muted", trim: true));
+            var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+            g.Children.Add(av);
+            Grid.SetColumn(txt, 1);
+            g.Children.Add(txt);
+            return new ListBoxItem { Content = g, Tag = p, Focusable = false, Padding = new Thickness(6, 4), Cursor = new Cursor(StandardCursorType.Hand) };
+        }
+
         void Input_KeyDown(object sender, KeyEventArgs e)
         {
+            if (MentionKey(e)) { e.Handled = true; return; }
             if (Markdown.HandleKey(_input, e, this)) { e.Handled = true; return; }
             if (e.Key != Key.Enter && e.Key != Key.Return) return;
             var mods = e.KeyModifiers;
