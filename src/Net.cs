@@ -38,6 +38,8 @@ namespace BluePhone
         public event Action<string> ByeReceived;
         public event Action<Packet, IPAddress> MessageReceived;
         public event Action<string, string> ReadReceived;   // msgId, fromId
+        /// <summary>상대가 글자를 입력 중 (t=typing · id · room · on)</summary>
+        public event Action<Packet> TypingReceived;
 
         public void Start(int port)
         {
@@ -242,6 +244,10 @@ namespace BluePhone
                             break;
                         case "read":
                             ReadReceived?.Invoke(Str(p, "msg"), Str(p, "id"));
+                            await ch.SendJson(ok).ConfigureAwait(false);
+                            break;
+                        case "typing":
+                            TypingReceived?.Invoke(p);
                             await ch.SendJson(ok).ConfigureAwait(false);
                             break;
                         case "get":

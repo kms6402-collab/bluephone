@@ -75,7 +75,11 @@
                     <TextBlock Text="{Binding Initial}" Foreground="White" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <Ellipse><Ellipse.Fill><ImageBrush ImageSource="{Binding AvatarImage}" Stretch="UniformToFill"/></Ellipse.Fill></Ellipse>
                 </Grid>
+                <TextBlock x:Name="sysTxt" Grid.ColumnSpan="2" Text="{Binding Text}" Visibility="Collapsed" HorizontalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource Ct.Meta}" Margin="20,6,20,6"/>
                 <StackPanel x:Name="col" Grid.Column="1" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding FromName}" FontSize="11.5" Foreground="{DynamicResource Ct.Sub}" Margin="2,0,0,3"
+                               Visibility="{Binding ShowSender, Converter={StaticResource Vis}}"/>
                     <StackPanel x:Name="tags" Orientation="Horizontal" Margin="2,0,0,3">
                         <Border Background="{DynamicResource DangerSoft}" CornerRadius="4" Padding="5,0" Margin="0,0,4,0"
                                 Visibility="{Binding Urgent, Converter={StaticResource Vis}}">
@@ -137,6 +141,11 @@
                 <DataTrigger Binding="{Binding IsProblem}" Value="True">
                     <Setter TargetName="meta" Property="Foreground" Value="{DynamicResource Danger}"/>
                 </DataTrigger>
+                <DataTrigger Binding="{Binding IsSys}" Value="True">
+                    <Setter TargetName="av" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="col" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="sysTxt" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
@@ -178,7 +187,7 @@
                     <Ellipse x:Name="HAvatar"/>
                     <TextBlock x:Name="HInitial" Foreground="White" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <Ellipse><Ellipse.Fill><ImageBrush x:Name="HPhoto" Stretch="UniformToFill"/></Ellipse.Fill></Ellipse>
-                    <Ellipse Width="11" Height="11" Fill="{DynamicResource Ct.Panel}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,-2"/>
+                    <Ellipse x:Name="HDotRing" Width="11" Height="11" Fill="{DynamicResource Ct.Panel}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,-2"/>
                     <Ellipse x:Name="HDot" Width="7" Height="7" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
                 </Grid>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -193,6 +202,7 @@
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button x:Name="PeopleBtn" Style="{StaticResource Chrome}" Content="&#xE716;" FontSize="13" ToolTip="대화 상대 · 그룹 대화 (초대 · 방 이름 · 나가기)" Click="People_Click" Foreground="{DynamicResource Ct.Sub}"/>
                     <Button x:Name="LookBtn" Style="{StaticResource Chrome}" Content="&#xE790;" FontSize="13" ToolTip="대화 창 꾸미기 — 테마 · 글꼴 · 글자 크기" Click="Look_Click" Foreground="{DynamicResource Ct.Sub}"/>
                     <Button Style="{StaticResource Chrome}" Content="&#xE718;" FontSize="12" ToolTip="항상 위에" Click="Pin_Click" x:Name="PinBtn" Foreground="{DynamicResource Ct.Sub}"/>
                     <Button Style="{StaticResource Chrome}" Content="&#xE921;" Click="Min_Click" Foreground="{DynamicResource Ct.Sub}"/>
@@ -206,6 +216,21 @@
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.ScrollUnit="Pixel" IsSynchronizedWithCurrentItem="False"/>
         <Button x:Name="MoreBtn" Grid.Row="1" Style="{StaticResource Outline}" Height="28" Padding="12,0" FontSize="12" Margin="0,8,0,0"
                 VerticalAlignment="Top" HorizontalAlignment="Center" Visibility="Collapsed" Click="More_Click" Content="이전 대화 더 보기"/>
+        <Border x:Name="TypingBar" Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="14,0,0,6" Padding="10,3"
+                CornerRadius="10" Background="{DynamicResource Ct.Panel}" Visibility="Collapsed" IsHitTestVisible="False">
+            <Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.12"/></Border.Effect>
+            <TextBlock x:Name="TypingText" FontSize="11.5" Foreground="{DynamicResource Ct.Sub}">
+                <TextBlock.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.45" Duration="0:0:0.7"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </TextBlock.Triggers>
+            </TextBlock>
+        </Border>
         <TextBlock x:Name="Empty" Grid.Row="1" Text="아직 주고받은 대화가 없어요" Style="{StaticResource Caption}" Foreground="{DynamicResource Ct.Sub}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
         <!-- composer -->

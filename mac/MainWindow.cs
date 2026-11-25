@@ -84,6 +84,8 @@ namespace BluePhone
             core.BlockedChanged += () => { QueuePeers(); RefreshCounts(); QueueConversations(); };
             core.PeerRenamed += _ => QueueConversations();
             AvatarStore.Changed += _ => Dispatcher.UIThread.Post(QueueConversations);
+            core.RoomsChanged += QueueConversations;
+            core.TypingChanged += _ => QueueConversations();
 
             BuildGroupBar();
             RefreshMe();
@@ -274,8 +276,8 @@ namespace BluePhone
                 },
             };
             _chatsPane.Children.Add(_chatList);
-            _chatsEmptyTitle = Ui.Text("아직 1:1 대화가 없어요", 13, FontWeight.SemiBold); _chatsEmptyTitle.HorizontalAlignment = HorizontalAlignment.Center;
-            _chatsEmptyBody = Ui.Text("동료 목록에서 동료를 더블클릭하면 대화를 시작합니다.", 12, fg: "Muted", wrap: true);
+            _chatsEmptyTitle = Ui.Text("아직 대화가 없어요", 13, FontWeight.SemiBold); _chatsEmptyTitle.HorizontalAlignment = HorizontalAlignment.Center;
+            _chatsEmptyBody = Ui.Text("동료 목록에서 동료를 더블클릭하면 대화를 시작합니다. 여러 명을 골라 오른쪽 클릭 › 그룹 대화 시작으로 그룹 대화를 만들 수 있습니다.", 12, fg: "Muted", wrap: true);
             _chatsEmptyBody.TextAlignment = TextAlignment.Center; _chatsEmptyBody.Margin = new Thickness(0, 6, 0, 0);
             _chatsEmpty = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(32, 0, 32, 40), IsVisible = false, Children = { _chatsEmptyTitle, _chatsEmptyBody } };
             _chatsPane.Children.Add(_chatsEmpty);
@@ -385,16 +387,19 @@ namespace BluePhone
             g.Children.Add(new Avatar { Size = 38, VerticalAlignment = VerticalAlignment.Center }
                 .Bind(Avatar.FillProperty, "AvatarBrush").Bind(Avatar.InitialProperty, "Initial").Bind(Avatar.ImageProperty, "AvatarImage").Bind(Avatar.StatusProperty, "StatusBrush"));
             var name = Ui.Text("", 13, FontWeight.SemiBold, trim: true).Bind(TextBlock.TextProperty, "Name");
-            name.Margin = new Thickness(0, 0, 64, 0);
+            var cnt = Ui.Text("", 13, fg: "Faint").Bind(TextBlock.TextProperty, "MemberText").Bind(IsVisibleProperty, "IsRoom").Dock(Dock.Right);
+            cnt.Margin = new Thickness(5, 0, 0, 0);
+            var nameRow = new DockPanel { Margin = new Thickness(0, 0, 64, 0), Children = { cnt, name } };
             var time = Ui.Text("", 11.5, fg: "Faint").Bind(TextBlock.TextProperty, "TimeText");
             time.HorizontalAlignment = HorizontalAlignment.Right;
             var badgeText = new TextBlock().Bind(TextBlock.TextProperty, "UnreadText");
             var badge = Ui.Badge(badgeText).Bind(IsVisibleProperty, "HasUnread").Dock(Dock.Right);
             badge.Margin = new Thickness(8, 0, 0, 0);
             badge.MinWidth = 18; badge.Height = 18;
-            var preview = Ui.Text("", 13, fg: "Ink2", trim: true).Bind(TextBlock.TextProperty, "Preview");
+            var preview = Ui.Text("", 13, fg: "Ink2", trim: true).Bind(TextBlock.TextProperty, "Preview")
+                .Bind(TextBlock.ForegroundProperty, "IsTyping", new Avalonia.Data.Converters.FuncValueConverter<bool, IBrush>(t => Ui.Brush(t ? "Accent" : "Ink2")));
             var line2 = new DockPanel { Margin = new Thickness(0, 3, 0, 0), Children = { badge, preview } };
-            g.Children.Add(new StackPanel { Margin = new Thickness(0, 10, 14, 10), VerticalAlignment = VerticalAlignment.Center, Children = { new Grid { Children = { name, time } }, line2 } }.Col(1));
+            g.Children.Add(new StackPanel { Margin = new Thickness(0, 10, 14, 10), VerticalAlignment = VerticalAlignment.Center, Children = { new Grid { Children = { nameRow, time } }, line2 } }.Col(1));
             return g;
         }
 
@@ -540,6 +545,12 @@ namespace BluePhone
         void FillGroupMenu(ContextMenu cm, PeerGroup g)
         {
             var send = Menus.Item("그룹에 쪽지 보내기", () => { var list = _core.GroupMembers(g); if (list.Count > 0) _core.Compose(list); }, bold: true);
+            var room = Menus.Item("그룹 대화 시작", () =>
+            {
+                var list = _core.GroupMembers(g).Where(x => !_core.IsBlocked(x.Id)).ToList();
+                if (list.Count == 0) { _ = Dialog.Alert(this, "그룹 대화", "그룹에 동료가 없습니다."); return; }
+                _core.OpenRoom(_core.CreateRoom(list, g.Name));
+            });
             var members = new MenuItem { Header = "구성원 추가 · 빼기" };
             var peers = _core.Peers.Where(x => !_core.IsBlocked(x.Id)).OrderByDescending(x => g.Members.Contains(x.Id)).ThenBy(x => x.DisplayName).ToList();
             if (peers.Count == 0) members.Items.Add(Menus.Item("동료가 없습니다", enabled: false));
@@ -571,7 +582,7 @@ namespace BluePhone
                 if (await Dialog.Confirm(this, "그룹 삭제", $"'{g.Name}' 그룹을 삭제할까요? 동료 목록에는 영향이 없습니다.", "삭제", danger: true))
                 { _core.Settings.Groups.Remove(g); _core.SaveGroups(); }
             });
-            cm.ItemsSource = new Control[] { send, members, ren, Menus.Sep(), del };
+            cm.ItemsSource = new Control[] { send, room, members, ren, Menus.Sep(), del };
         }
 
         async System.Threading.Tasks.Task<PeerGroup> NewGroup(IEnumerable<Peer> members)
@@ -755,6 +766,11 @@ namespace BluePhone
             var items = new List<Control>
             {
                 Menus.Item("대화 보기", () => { var p = sel.FirstOrDefault(); if (p != null) _core.OpenChat(p); }, bold: true, enabled: sel.Length == 1),
+                Menus.Item(sel.Length > 1 ? $"{sel.Length + 1}명 그룹 대화 시작" : "그룹 대화 시작", () =>
+                {
+                    var list = sel.Where(p => !_core.IsBlocked(p.Id)).ToList();
+                    if (list.Count > 0) _core.OpenRoom(_core.CreateRoom(list));
+                }, enabled: sel.Length > 0),
                 Menus.Item(sel.Length > 1 ? $"{sel.Length}명에게 쪽지 보내기" : "쪽지 보내기", () => _core.Compose(sel), enabled: sel.Length > 0),
                 Menus.Sep(),
                 Menus.Item(sel.Length > 0 && sel.All(p => p.Favorite) ? "즐겨찾기 해제" : "즐겨찾기에 추가", () =>
@@ -865,9 +881,8 @@ namespace BluePhone
 
         void OpenMsg(ChatMessage m)
         {
-            var p = m.Chat ? _core.PeerOf(m) : null;
-            if (p != null) _core.OpenChat(p);
-            else _core.ShowPopup(m, activate: true);
+            if (m.Chat && _core.OpenChatFor(m) != null) return;
+            _core.ShowPopup(m, activate: true);
         }
 
         void HmReply()
@@ -889,8 +904,9 @@ namespace BluePhone
         void HmChat()
         {
             var m = SelectedMsgs().FirstOrDefault();
-            var p = m == null ? null : _core.PeerOf(m);
-            if (p != null) _core.OpenChat(p);
+            if (m == null) return;
+            if (m.Room != null) _core.OpenChatFor(m);
+            else { var p = _core.PeerOf(m); if (p != null) _core.OpenChat(p); }
         }
 
         async void HmCancel()
@@ -923,32 +939,40 @@ namespace BluePhone
         void BuildConversations()
         {
             if (_chatList == null) return;
-            var selected = _chatList.SelectedItems?.OfType<Conversation>().Select(c => c.PeerId).ToList() ?? new List<string>();
+            var selected = _chatList.SelectedItems?.OfType<Conversation>().Select(c => c.Key).ToList() ?? new List<string>();
             var q = _search?.Text?.Trim();
+            var rooms = _core.ActiveRooms.ToDictionary(r => r.Id);
             var list = _core.History.Where(m => m.Chat && !m.Broadcast)
-                .Select(m => new { m, id = m.Outgoing ? (m.ToIds.Count == 1 ? m.ToIds[0] : null) : m.PeerId })
-                .Where(x => x.id != null && !_core.IsBlocked(x.id))
-                .GroupBy(x => x.id)
+                .Select(m => new { m, key = Core.KeyOf(m) })
+                .Where(x => x.key != null && (Core.IsRoomKey(x.key) ? rooms.ContainsKey(x.m.Room) : !_core.IsBlocked(x.key)))
+                .GroupBy(x => x.key)
                 .Select(g =>
                 {
                     var last = g.OrderByDescending(x => x.m.Ts).First().m;
+                    var room = last.Room != null ? rooms[last.Room] : null;
                     return new Conversation
                     {
-                        PeerId = g.Key,
-                        Peer = _core.Peers.FirstOrDefault(p => p.Id == g.Key),
+                        PeerId = room == null ? g.Key : null,
+                        Peer = room == null ? _core.Peers.FirstOrDefault(p => p.Id == g.Key) : null,
+                        Room = room,
                         Last = last,
                         Count = g.Count(),
                         Unread = g.Count(x => !x.m.Outgoing && !x.m.Read),
                     };
-                })
-                .Where(c => string.IsNullOrEmpty(q) || Has(c.Name, q) || _core.History.Any(m => m.Chat && m.Involves(c.PeerId) && Has(m.Text, q)))
-                .OrderByDescending(c => c.Last.Ts)
+                }).ToList();
+            // 만들었지만 아직 대화가 없는 방도 보이도록
+            foreach (var r in rooms.Values.Where(r => list.All(c => c.Room != r)))
+                list.Add(new Conversation { Room = r });
+            foreach (var c in list) c.Typing = _core.TypingText(c.Key);
+            list = list
+                .Where(c => string.IsNullOrEmpty(q) || Has(c.Name, q) || _core.History.Any(m => Core.InChat(m, c.Key) && Has(m.Text, q)))
+                .OrderByDescending(c => c.Last?.Ts ?? c.Room?.CreatedTs ?? 0)
                 .ToList();
             _chatList.ItemsSource = list;
-            foreach (var c in list) if (selected.Contains(c.PeerId)) _chatList.SelectedItems.Add(c);
+            foreach (var c in list) if (selected.Contains(c.Key)) _chatList.SelectedItems.Add(c);
             _chatsEmpty.IsVisible = list.Count == 0;
             bool searching = !string.IsNullOrEmpty(q);
-            _chatsEmptyTitle.Text = searching ? "검색 결과가 없습니다" : "아직 1:1 대화가 없어요";
+            _chatsEmptyTitle.Text = searching ? "검색 결과가 없습니다" : "아직 대화가 없어요";
             _chatsEmptyBody.IsVisible = !searching;
         }
 
@@ -956,6 +980,7 @@ namespace BluePhone
 
         void OpenConversation(Conversation c)
         {
+            if (c.Room != null) { _core.OpenRoom(c.Room); return; }
             var p = c.Peer ?? _core.Peers.FirstOrDefault(x => x.Id == c.PeerId);
             if (p != null) _core.OpenChat(p);
             else _ = Dialog.Alert(this, "대화 창을 열 수 없습니다", "동료 목록에서 삭제된 동료입니다. 다시 접속하면 열 수 있습니다.");
@@ -965,18 +990,17 @@ namespace BluePhone
 
         void CmRead()
         {
-            foreach (var c in SelectedConvs())
-                foreach (var m in _core.History.Where(x => x.Chat && !x.Outgoing && !x.Read && x.PeerId == c.PeerId).ToList()) _core.MarkRead(m);
+            foreach (var c in SelectedConvs()) _core.MarkChatRead(c.Key);
         }
 
         async void CmDelete()
         {
             var sel = SelectedConvs();
             if (sel.Length == 0) return;
-            var names = string.Join(", ", sel.Select(c => c.Name).Take(3)) + (sel.Length > 3 ? $" 외 {sel.Length - 3}명" : "");
-            if (!await Dialog.Confirm(this, "대화 내용 삭제", $"{names}님과의 1:1 대화를 이 Mac에서 삭제할까요? 쪽지함의 쪽지는 지워지지 않습니다.", "삭제", danger: true)) return;
-            var ids = sel.Select(c => c.PeerId).ToList();
-            var msgs = _core.History.Where(m => m.Chat && ids.Any(id => m.Involves(id))).ToList();
+            var names = string.Join(", ", sel.Select(c => c.Name).Take(3)) + (sel.Length > 3 ? $" 외 {sel.Length - 3}개" : "");
+            if (!await Dialog.Confirm(this, "대화 내용 삭제", $"{names} 대화 내용을 이 Mac에서 삭제할까요? 쪽지함의 쪽지는 지워지지 않습니다.\n그룹 대화방에서 아예 나가려면 대화 창의 👥 버튼 › 방 나가기를 누르세요.", "삭제", danger: true)) return;
+            var keys = sel.Select(c => c.Key).ToList();
+            var msgs = _core.History.Where(m => keys.Any(k => Core.InChat(m, k))).ToList();
             _core.DeleteHistory(msgs);
         }
     }

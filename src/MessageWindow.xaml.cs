@@ -26,10 +26,10 @@ namespace BluePhone
             {
                 _chatAlert = value;
                 if (!value) return;
-                if (!Message.Urgent) SetTag("1:1 대화", "Accent", "AccentSoft");
+                if (!Message.Urgent) SetTag(Message.Room != null ? "그룹 대화" : "1:1 대화", "Accent", "AccentSoft");
                 ReplyText.Text = "대화 열기";
                 ChatBtn.Visibility = Visibility.Collapsed;
-                if (_privacy < 2) Title = (Message.FromName ?? "") + "님의 대화";
+                if (_privacy < 2) Title = (Message.FromName ?? "") + (Message.Room != null ? "님 · " + (_core.RoomOf(Message.Room)?.Title ?? "그룹 대화") : "님의 대화");
             }
         }
         /// <summary>'다시 알림'으로 다시 뜬 팝업</summary>
@@ -80,7 +80,7 @@ namespace BluePhone
                 var sub = new[] { m.PeerDept, m.FullTime }.Where(x => !string.IsNullOrWhiteSpace(x));
                 SubLine.Text = string.Join(" · ", sub);
                 SubLine.ToolTip = $"{m.PeerIp}";
-                if (m.To.Count > 1 && !m.Broadcast) Footnote.Text = $"나 외 {m.To.Count - 1}명에게 보낸 쪽지";
+                if (m.To.Count > 1 && !m.Broadcast && m.Room == null) Footnote.Text = $"나 외 {m.To.Count - 1}명에게 보낸 쪽지";
                 foreach (var f in m.Files)
                     if (string.IsNullOrEmpty(f.State)) f.State = !string.IsNullOrEmpty(f.LocalPath) && File.Exists(f.LocalPath) ? "완료" : "";
             }
@@ -89,7 +89,7 @@ namespace BluePhone
             else if (m.Broadcast) SetTag("전체 공지", "Accent", "AccentSoft");
             else if (m.Auto) SetTag("자동응답", "Muted", "Hover");
 
-            if (m.Broadcast || (m.Outgoing && m.ToIds.Count != 1) || _core.PeerOf(m) == null) ChatBtn.Visibility = Visibility.Collapsed;
+            if (m.Broadcast || (m.Outgoing && m.ToIds.Count != 1 && m.Room == null) || (m.Room == null ? _core.PeerOf(m) == null : _core.RoomOf(m.Room) == null)) ChatBtn.Visibility = Visibility.Collapsed;
 
             FileList.ItemsSource = m.Files;
             FileList.Visibility = m.Files.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -275,9 +275,9 @@ namespace BluePhone
                 Avatar.Fill = m.AvatarBrush;
                 SubLine.Text = string.Join(" · ", new[] { m.PeerDept, m.FullTime }.Where(x => !string.IsNullOrWhiteSpace(x)));
                 SubLine.ToolTip = m.PeerIp;
-                if (m.To.Count > 1 && !m.Broadcast) Footnote.Text = $"나 외 {m.To.Count - 1}명에게 보낸 쪽지";
+                if (m.To.Count > 1 && !m.Broadcast && m.Room == null) Footnote.Text = $"나 외 {m.To.Count - 1}명에게 보낸 쪽지";
                 RefreshHeader();
-                if (_chatAlert) Title = (m.FromName ?? "") + "님의 대화";
+                if (_chatAlert) Title = (m.FromName ?? "") + (m.Room != null ? "님 · " + (_core.RoomOf(m.Room)?.Title ?? "그룹 대화") : "님의 대화");
             }
         }
 
@@ -300,9 +300,7 @@ namespace BluePhone
         void Chat_Click(object sender, RoutedEventArgs e)
         {
             MarkRead();
-            var p = _core.PeerOf(Message);
-            if (p == null) return;
-            _core.OpenChat(p);
+            if (_core.OpenChatFor(Message) == null) return;
             Close();
         }
 
@@ -405,11 +403,13 @@ namespace BluePhone
             var text = ReplyBox.Text.Trim();
             if (text.Length == 0 || _sending) return;
             var peer = Target();
-            if (peer == null) { Footnote.Text = "보낸 사람을 찾을 수 없습니다"; return; }
+            var room = Message.Room == null ? null : _core.RoomOf(Message.Room);
+            if (peer == null && room == null) { Footnote.Text = "보낸 사람을 찾을 수 없습니다"; return; }
             _sending = true;
             ReplyBtn.IsEnabled = false;
             ReplyText.Text = "보내는 중…";
-            var m = await _core.Send(new[] { peer }, text, null, false, false);
+            // 그룹 대화 알림의 답장은 그 대화방으로
+            var m = room != null ? await _core.SendRoom(room, text, null, false) : await _core.Send(new[] { peer }, text, null, false, false);
             if (m.Failed)
             {
                 _sending = false;

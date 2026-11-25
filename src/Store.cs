@@ -104,6 +104,18 @@ namespace BluePhone
             }
         }
 
+        /// <summary>여러 메시지를 한 번에 기록 (읽음 처리 등)</summary>
+        public static void AppendHistory(IEnumerable<ChatMessage> list)
+        {
+            var sb = new StringBuilder();
+            foreach (var m in list) sb.Append(Json.Serialize(m)).Append('\n');
+            if (sb.Length == 0) return;
+            lock (HistoryLock)
+            {
+                try { File.AppendAllText(HistoryPath, sb.ToString(), new UTF8Encoding(false)); } catch { }
+            }
+        }
+
         public static void RewriteHistory(IEnumerable<ChatMessage> all)
         {
             lock (HistoryLock)

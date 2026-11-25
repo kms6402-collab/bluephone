@@ -189,6 +189,16 @@ namespace BluePhone
         public bool Scheduled { get; set; }
         /// <summary>1:1 대화 창에서 보낸(받은) 메시지. false 면 쪽지</summary>
         public bool Chat { get; set; }
+        /// <summary>그룹 대화방 ID. null 이면 1:1 대화(또는 쪽지)</summary>
+        public string Room { get; set; }
+        /// <summary>그룹 대화방의 알림 줄 종류 (invite · leave · rename). 말풍선 대신 가운데 작은 글씨로</summary>
+        public string Sys { get; set; }
+        [ScriptIgnore] public bool IsSys => !string.IsNullOrEmpty(Sys);
+        [ScriptIgnore] public bool IsRoom => Room != null;
+        /// <summary>그룹 대화방에서 받은 메시지 — 말풍선 위에 보낸 사람 이름</summary>
+        [ScriptIgnore] public bool ShowSender => Room != null && !Outgoing && !IsSys;
+        /// <summary>1:1 대화 창에 보일 메시지 (그룹 대화 · 알림 줄 제외)</summary>
+        public bool IsDirectWith(string peerId) => Room == null && Involves(peerId);
         [ScriptIgnore] public bool IsNote => !Chat;
         public bool Secure { get; set; }
         [ScriptIgnore] public bool IsPending => Outgoing && (Scheduled || PendingTo.Count > 0);
@@ -251,7 +261,16 @@ namespace BluePhone
                 if (Outgoing && Scheduled) parts.Add("예약 · " + ScheduleText);
                 else if (Outgoing && PendingTo.Count > 0)
                     parts.Add(To.Count <= 1 ? "대기 중 · 상대가 접속하면 전달" : $"대기 {PendingTo.Count}명");
-                if (Outgoing && !Scheduled)
+                if (Outgoing && !Scheduled && Room != null)
+                {
+                    // 그룹 대화: 카카오톡처럼 아직 안 읽은 사람 수
+                    int unread = Math.Max(0, ToIds.Count - FailedTo.Count - ReadBy.Count);
+                    if (IsSys) { }
+                    else if (Failed) parts.Add("전달 실패");
+                    else if (ToIds.Count > 0) parts.Add(unread > 0 ? $"안 읽음 {unread}" : "모두 읽음");
+                    if (FailedTo.Count > 0 && !Failed) parts.Add($"실패 {FailedTo.Count}");
+                }
+                else if (Outgoing && !Scheduled)
                 {
                     if (To.Count <= 1 && PendingTo.Count > 0) { }
                     else if (To.Count <= 1) parts.Add(Failed ? "전달 실패" : Read ? "읽음" : "전달됨");
@@ -307,6 +326,10 @@ namespace BluePhone
         public string SkippedVersion { get; set; } = "";
         public string LastRunVersion { get; set; } = "";
         public List<PeerGroup> Groups { get; set; } = new List<PeerGroup>();
+        /// <summary>그룹 대화방</summary>
+        public List<ChatRoom> Rooms { get; set; } = new List<ChatRoom>();
+        /// <summary>글자를 입력하는 동안 상대에게 "입력 중" 표시</summary>
+        public bool ShareTyping { get; set; } = true;
         public List<Reminder> Reminders { get; set; } = new List<Reminder>();
         public bool CaptureHotkey { get; set; } = true;
         /// <summary>텔레그램 연동: 받은 쪽지 · 대화를 텔레그램으로 받고, 텔레그램에서 명령으로 보내기</summary>
@@ -338,6 +361,44 @@ namespace BluePhone
         public double WinHeight { get; set; } = 640;
     }
 
+    /// <summary>그룹 대화방 — 여러 동료가 함께 쓰는 대화 창</summary>
+    public class ChatRoom
+    {
+        public string Id { get; set; }
+        public string Name { get; set; } = "";
+        /// <summary>구성원 (나 포함)</summary>
+        public List<RoomMember> Members { get; set; } = new List<RoomMember>();
+        public long CreatedTs { get; set; }
+        /// <summary>내가 나간 방</summary>
+        public bool Left { get; set; }
+
+        public static Func<string, Peer> Lookup;
+        public static string MyId;
+
+        [ScriptIgnore] public IEnumerable<RoomMember> Others => Members.Where(m => m.Id != MyId);
+        public string NameOf(string id) => Lookup?.Invoke(id)?.DisplayName ?? Members.FirstOrDefault(m => m.Id == id)?.Name ?? "";
+        /// <summary>방 이름을 정하지 않았으면 구성원 이름으로</summary>
+        [ScriptIgnore] public string Title
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(Name)) return Name.Trim();
+                var names = Others.Select(m => NameOf(m.Id)).Where(n => n.Length > 0).ToList();
+                if (names.Count == 0) return "그룹 대화";
+                return names.Count <= 3 ? string.Join(", ", names) : string.Join(", ", names.Take(3)) + $" 외 {names.Count - 3}명";
+            }
+        }
+        [ScriptIgnore] public int Count => Members.Count;
+    }
+
+    public class RoomMember
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Ip { get; set; }
+        public int Port { get; set; }
+    }
+
     public class PeerGroup
     {
         public string Name { get; set; }
@@ -350,23 +411,85 @@ namespace BluePhone
         public long At { get; set; }
     }
 
-    /// <summary>대화함의 한 줄 — 동료 한 명과의 1:1 대화 요약</summary>
+    /// <summary>대화함의 한 줄 — 동료 한 명과의 1:1 대화, 또는 그룹 대화방 요약</summary>
     public sealed class Conversation
     {
         public string PeerId { get; set; }
         public Peer Peer { get; set; }
+        public ChatRoom Room { get; set; }
         public ChatMessage Last { get; set; }
         public int Unread { get; set; }
         public int Count { get; set; }
-        public string Name => Peer?.DisplayName ?? Last?.Who ?? "";
-        public string Initial => string.IsNullOrEmpty(Name) ? "?" : Name.Substring(0, 1);
-        public Brush AvatarBrush => Palette.Avatar(PeerId ?? Name);
-        public ImageSource AvatarImage => PeerId == null ? null : AvatarStore.Get(PeerId);
-        public Brush StatusBrush => Peer?.StatusBrush ?? Status.Brush(Status.Offline);
-        public string Preview => Last == null ? "" : (Last.Outgoing ? "나: " : "") + Last.Preview;
+        /// <summary>"OO님이 입력 중…" (없으면 null)</summary>
+        public string Typing { get; set; }
+        /// <summary>대화 창 · 입력 중 표시에 쓰는 열쇠 (1:1 은 동료 ID, 그룹은 room:방ID)</summary>
+        public string Key => Room != null ? Typists.RoomKey(Room.Id) : PeerId;
+        public bool IsRoom => Room != null;
+        public bool IsTyping => Typing != null;
+        public string Name => Room != null ? Room.Title : Peer?.DisplayName ?? Last?.Who ?? "";
+        public string MemberText => Room != null ? Room.Count.ToString() : "";
+        public string Initial => Room != null ? "👥" : string.IsNullOrEmpty(Name) ? "?" : Name.Substring(0, 1);
+        public Brush AvatarBrush => Palette.Avatar(Room != null ? "room:" + Room.Id : PeerId ?? Name);
+        public ImageSource AvatarImage => Room != null || PeerId == null ? null : AvatarStore.Get(PeerId);
+        public Brush StatusBrush => Room != null ? null : Peer?.StatusBrush ?? Status.Brush(Status.Offline);
+        public string Preview => Typing ?? (Last == null ? "" : Last.IsSys ? Last.Text : (Last.Outgoing ? "나: " : Room != null ? Last.FromName + ": " : "") + Last.Preview);
         public string TimeText => Last?.TimeText ?? "";
         public bool HasUnread => Unread > 0;
         public string UnreadText => Unread > 99 ? "99+" : Unread.ToString();
+    }
+
+    /// <summary>
+    /// 상대가 글자를 입력하고 있는지 (대화 창 · 대화함의 "입력 중…").
+    /// 상대는 입력하는 동안 3초마다 알려 주고, 7초 동안 소식이 없으면 멈춘 것으로 봄
+    /// </summary>
+    public sealed class Typists
+    {
+        public const int SendEveryMs = 3000;
+        public const int ExpireMs = 7000;
+        public static string RoomKey(string roomId) => "room:" + roomId;
+
+        // 열쇠(1:1 = 동료 ID, 그룹 = room:ID) → 동료 ID → 마지막 알림 시각
+        readonly Dictionary<string, Dictionary<string, long>> _map = new Dictionary<string, Dictionary<string, long>>();
+        static long Now => DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
+        /// <summary>바뀌었으면 true</summary>
+        public bool Set(string key, string peerId, bool on)
+        {
+            if (!_map.TryGetValue(key, out var d)) { if (!on) return false; d = _map[key] = new Dictionary<string, long>(); }
+            bool had = d.ContainsKey(peerId);
+            if (on) d[peerId] = Now; else d.Remove(peerId);
+            if (d.Count == 0) _map.Remove(key);
+            return had != on;
+        }
+
+        public List<string> Who(string key)
+        {
+            if (key == null || !_map.TryGetValue(key, out var d)) return new List<string>();
+            var now = Now;
+            return d.Where(x => now - x.Value < ExpireMs).Select(x => x.Key).ToList();
+        }
+
+        public bool Any => _map.Count > 0;
+
+        /// <summary>오래된 표시 정리. 바뀐 열쇠 목록</summary>
+        public List<string> Expire()
+        {
+            var now = Now;
+            var changed = new List<string>();
+            foreach (var kv in _map.ToList())
+            {
+                foreach (var id in kv.Value.Where(x => now - x.Value >= ExpireMs).Select(x => x.Key).ToList()) { kv.Value.Remove(id); if (!changed.Contains(kv.Key)) changed.Add(kv.Key); }
+                if (kv.Value.Count == 0) _map.Remove(kv.Key);
+            }
+            return changed;
+        }
+
+        /// <summary>"홍길동님이 입력 중…" / "홍길동님 외 2명이 입력 중…"</summary>
+        public static string Text(IList<string> names)
+        {
+            if (names == null || names.Count == 0) return null;
+            return names.Count == 1 ? $"{names[0]}님이 입력 중…" : $"{names[0]}님 외 {names.Count - 1}명이 입력 중…";
+        }
     }
 
     public sealed class BlockedPeer

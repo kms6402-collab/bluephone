@@ -25,7 +25,7 @@ namespace BluePhone
         string _tgError;
 
         TextBox _name, _dept, _note, _away, _autoReply, _dir, _port, _hosts, _tgToken, _tgProxy, _tgUser, _tgPass, _tgApi;
-        CheckBox _sound, _noFocus, _receipt, _enter, _hotkey, _autoStart, _hidden, _autoUpdate, _tg, _tgNotes, _tgChats, _tgText, _tgFiles, _tgAway;
+        CheckBox _sound, _noFocus, _receipt, _typing, _enter, _hotkey, _autoStart, _hidden, _autoUpdate, _tg, _tgNotes, _tgChats, _tgText, _tgFiles, _tgAway;
         Chips _autoClose, _chatClose, _privacy, _tgNet;
         Avatar _photoView;
         Button _removePhoto, _tgConnect, _tgTest, _tgUnlink, _tgDiag, _checkBtn;
@@ -184,6 +184,7 @@ namespace BluePhone
             p.Children.Add(RowBox(new StackPanel { Children = { new TextBlock { Text = "알림 개인정보 보호" },
                 Help("쪽지·대화 알림이 뜰 때 화면에 보여 줄 범위입니다. 가려진 알림은 누르거나 '내용 보기'를 눌러야 보이고, 그 전에는 읽음으로 처리하지 않습니다."), _privacy.Panel } }));
             p.Children.Add(RowBox(_receipt = Switch("읽음 확인 보내기", "쪽지를 열면 보낸 사람에게 '읽음'으로 표시됩니다")));
+            p.Children.Add(RowBox(_typing = Switch("입력 중 표시 보내기", "대화 창에서 글자를 입력하는 동안 상대 대화 창에 '입력 중…'으로 표시됩니다")));
             p.Children.Add(RowBox(_enter = Switch("대화 창에서 Enter 로 보내기", $"끄면 {mod}Enter 로 보내고, Enter 는 줄바꿈이 됩니다")));
             p.Children.Add(RowBox(_hotkey = Switch(Native.IsMac ? "화면 캡처 단축키 ⌃⌥S" : "화면 캡처 단축키 Ctrl+Alt+S", "어디서든 영역을 드래그해 바로 쪽지에 첨부합니다")));
 
@@ -336,6 +337,7 @@ namespace BluePhone
             if (_chatClose.Value == null) _chatClose.Value = "5";
             _privacy.Value = s.AlertPrivacy.ToString();
             _receipt.IsChecked = s.ReadReceipts;
+            _typing.IsChecked = s.ShareTyping;
             _enter.IsChecked = s.EnterToSend;
             _hotkey.IsChecked = s.CaptureHotkey;
             _away.Text = s.AutoAwayMinutes.ToString();
@@ -606,6 +608,7 @@ namespace BluePhone
             s.AlertPrivacy = int.TryParse(_privacy.Value, out int pl) ? pl : 1;
             s.PopupAutoClose = int.TryParse(_autoClose.Value, out int sec) ? sec : 0;
             s.ReadReceipts = _receipt.IsChecked == true;
+            s.ShareTyping = _typing.IsChecked == true;
             s.EnterToSend = _enter.IsChecked == true;
             bool hk = _hotkey.IsChecked == true;
             if (hk != s.CaptureHotkey) { s.CaptureHotkey = hk; _core.ApplyHotkey(); }

@@ -37,6 +37,34 @@ namespace BluePhone
 
         // ───────────── 이미지 불러오기 (파일을 잠그지 않고, 화면 크기에 맞춰 줄여서) ─────────────
 
+        // 최근에 읽은 이미지 (경로 · 크기 · 수정 시각이 같으면 다시 읽지 않음)
+        static readonly Dictionary<string, BitmapSource> _cache = new Dictionary<string, BitmapSource>();
+        static readonly LinkedList<string> _cacheOrder = new LinkedList<string>();
+        const int CacheMax = 120;
+
+        static string CacheKey(string path, int maxSide)
+        {
+            try { return path + "|" + maxSide + "|" + File.GetLastWriteTimeUtc(path).Ticks; } catch { return null; }
+        }
+
+        static BitmapSource Cached(string key)
+        {
+            if (key == null) return null;
+            lock (_cache) return _cache.TryGetValue(key, out var b) ? b : null;
+        }
+
+        static void Remember(string key, BitmapSource b)
+        {
+            if (key == null || b == null) return;
+            lock (_cache)
+            {
+                if (_cache.ContainsKey(key)) return;
+                _cache[key] = b;
+                _cacheOrder.AddLast(key);
+                while (_cacheOrder.Count > CacheMax) { _cache.Remove(_cacheOrder.First.Value); _cacheOrder.RemoveFirst(); }
+            }
+        }
+
         static BitmapSource LoadStill(string path, int maxSide)
         {
             var bytes = File.ReadAllBytes(path);
@@ -141,10 +169,14 @@ namespace BluePhone
             img.Source = null;
             if (!Exists(path)) return;
             img.Tag = path;
+            bool gif0 = IsGif(path);
+            var key = gif0 ? null : CacheKey(path, maxSide);
+            var hit = Cached(key);
+            if (hit != null) { img.Source = hit; return; }   // 바로 표시 (창을 다시 열 때 말풍선 높이가 출렁이지 않음)
             try
             {
                 Anim anim = null; BitmapSource still = null;
-                bool gif = IsGif(path);
+                bool gif = gif0;
                 await Task.Run(() =>
                 {
                     if (gif) { try { anim = LoadGif(path, maxSide); } catch { anim = null; } }
@@ -164,7 +196,7 @@ namespace BluePhone
                     img.Source = anim.Frames[0];
                     img.BeginAnimation(Image.SourceProperty, a);
                 }
-                else img.Source = still;
+                else { img.Source = still; Remember(key, still); }
             }
             catch { img.Source = null; }
         }

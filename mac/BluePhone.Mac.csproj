@@ -14,7 +14,7 @@
     <RootNamespace>BluePhone</RootNamespace>
     <DefineConstants>$(DefineConstants);MAC</DefineConstants>
     <!-- 버전: 로컬 빌드 기본값. GitHub Actions 는 태그에서 -p:Version 으로 덮어씀 -->
-    <Version>2.5.1</Version>
+    <Version>2.6.0</Version>
     <Company>BluePhone</Company>
     <Product>파란전화기</Product>
     <Copyright>© 2026 파란전화기</Copyright>
@@ -44,6 +44,8 @@
     <Compile Include="..\src\Telegram.cs" Link="Shared\Telegram.cs" />
     <Compile Include="..\src\TgMenu.cs" Link="Shared\TgMenu.cs" />
     <Compile Include="..\src\TgNet.cs" Link="Shared\TgNet.cs" />
+    <Compile Include="..\src\CoreChat.cs" Link="Shared\CoreChat.cs" />
+    <Compile Include="..\src\UiTest.cs" Link="Shared\UiTest.cs" />
   </ItemGroup>
 
   <ItemGroup>

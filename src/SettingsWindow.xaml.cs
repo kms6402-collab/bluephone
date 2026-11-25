@@ -39,6 +39,7 @@ namespace BluePhone
             if (!AutoClosePanel.Children.OfType<System.Windows.Controls.RadioButton>().Any(r => r.IsChecked == true))
                 ((System.Windows.Controls.RadioButton)AutoClosePanel.Children[0]).IsChecked = true;
             ReceiptChk.IsChecked = s.ReadReceipts;
+            TypingChk.IsChecked = s.ShareTyping;
             EnterChk.IsChecked = s.EnterToSend;
             HotkeyChk.IsChecked = s.CaptureHotkey;
             if (s.CaptureHotkey && core.HotkeyFailed) HotkeyHelp.Text = "다른 프로그램이 이미 Ctrl+Alt+S 를 쓰고 있어 등록하지 못했습니다";
@@ -408,6 +409,7 @@ namespace BluePhone
             var ac = AutoClosePanel.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => r.IsChecked == true);
             s.PopupAutoClose = ac != null && int.TryParse((string)ac.Tag, out int sec) ? sec : 0;
             s.ReadReceipts = ReceiptChk.IsChecked == true;
+            s.ShareTyping = TypingChk.IsChecked == true;
             s.EnterToSend = EnterChk.IsChecked == true;
             bool hk = HotkeyChk.IsChecked == true;
             if (hk != s.CaptureHotkey) { s.CaptureHotkey = hk; _core.ApplyHotkey(); }

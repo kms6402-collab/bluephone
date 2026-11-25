@@ -147,6 +147,14 @@
                     </CheckBox>
                 </Border>
                 <Border Style="{StaticResource Row}">
+                    <CheckBox x:Name="TypingChk" Style="{StaticResource Switch}">
+                        <StackPanel>
+                            <TextBlock Text="입력 중 표시 보내기"/>
+                            <TextBlock Text="대화 창에서 글자를 입력하는 동안 상대 대화 창에 '입력 중…'으로 표시됩니다" Style="{StaticResource Help}"/>
+                        </StackPanel>
+                    </CheckBox>
+                </Border>
+                <Border Style="{StaticResource Row}">
                     <CheckBox x:Name="EnterChk" Style="{StaticResource Switch}">
                         <StackPanel>
                             <TextBlock Text="대화 창에서 Enter 로 보내기"/>

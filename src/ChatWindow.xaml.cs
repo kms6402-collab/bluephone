@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -14,49 +15,56 @@ using System.Windows.Threading;
 
 namespace BluePhone
 {
-    /// <summary>한 동료와 주고받은 쪽지를 말풍선 대화로 보여 주는 창</summary>
+    /// <summary>한 동료와의 1:1 대화, 또는 여러 동료와의 그룹 대화를 말풍선으로 보여 주는 창</summary>
     public partial class ChatWindow : Window
     {
         readonly Core _core;
+        /// <summary>1:1 대화 상대 (그룹 대화면 null)</summary>
         public Peer Peer { get; }
-        readonly ListCollectionView _view;
+        /// <summary>그룹 대화방 (1:1 이면 null)</summary>
+        public ChatRoom Room { get; }
+        /// <summary>대화 열쇠: 1:1 은 동료 ID, 그룹은 room:방ID</summary>
+        public string ChatKey { get; }
+        ObservableCollection<ChatMessage> _rows = new ObservableCollection<ChatMessage>();
         readonly ObservableCollection<ComposeWindow.Attachment> _files = new ObservableCollection<ComposeWindow.Attachment>();
+        readonly List<Peer> _watched = new List<Peer>();
         DateTime? _at;
         bool _sending;
         int _zipping;
 
-        public ChatWindow(Core core, Peer peer)
+        public ChatWindow(Core core, Peer peer) : this(core, peer, null) { }
+        public ChatWindow(Core core, ChatRoom room) : this(core, null, room) { }
+
+        ChatWindow(Core core, Peer peer, ChatRoom room)
         {
             _core = core;
             Peer = peer;
+            Room = room;
+            ChatKey = room != null ? Typists.RoomKey(room.Id) : peer.Id;
             _look = ChatLook.Apply(this, core.Settings);
             InitializeComponent();
             Chrome.Apply(this, caption: 58);
             Chrome.NoMaximize(this);
 
             // 처음에는 최근 대화만 (오래 쌓인 기록이 많아도 창이 바로 열리도록) — '이전 대화 더 보기'로 늘림
-            _since = SinceFor(PageSize);
-            _view = new ListCollectionView(core.History)
-            {
-                Filter = o => o is ChatMessage m && m.Chat && m.Ts >= _since && m.Involves(peer.Id),   // 쪽지는 쪽지함에서, 대화 창은 1:1 대화만
-            };
-            _view.SortDescriptions.Add(new SortDescription(nameof(ChatMessage.Ts), ListSortDirection.Ascending));
-            List.ItemsSource = _view;
+            Rebuild();
             FileList.ItemsSource = _files;
 
-            foreach (ChatMessage m in _view)
-                foreach (var f in m.Files)
-                {
-                    if (m.Outgoing) f.State = "보낸 파일";
-                    else if (string.IsNullOrEmpty(f.State) && !string.IsNullOrEmpty(f.LocalPath) && File.Exists(f.LocalPath)) f.State = "완료";
-                }
-
-            ((INotifyCollectionChanged)_view).CollectionChanged += (s, e) => { RefreshEmpty(); if (e.Action == NotifyCollectionChangedAction.Add) ScrollToEnd(); };
-            peer.PropertyChanged += Peer_PropertyChanged;
-            Closed += (s, e) => peer.PropertyChanged -= Peer_PropertyChanged;
+            // 기록 전체를 다시 거르지 않고, 새로 온 메시지만 끝에 붙임
+            core.History.CollectionChanged += History_Changed;
+            core.TypingChanged += Core_TypingChanged;
+            core.RoomsChanged += Core_RoomsChanged;
+            Closed += (s, e) =>
+            {
+                core.History.CollectionChanged -= History_Changed;
+                core.TypingChanged -= Core_TypingChanged;
+                core.RoomsChanged -= Core_RoomsChanged;
+                foreach (var w in _watched) w.PropertyChanged -= Peer_PropertyChanged;
+                _core.NotifyTyping(ChatKey, false);
+            };
+            WatchPeers();
             RefreshHeader();
-            RefreshEmpty();
-            RefreshMore();
+            RefreshTyping();
             // 이 창 안의 오른쪽 클릭 메뉴도 테마 색을 따르도록
             AddHandler(ContextMenuOpeningEvent, new ContextMenuEventHandler((s, e) =>
             {
@@ -66,20 +74,24 @@ namespace BluePhone
             }), true);
             UpdateSendState();
 
-            Input.TextChanged += (s, e) => UpdateSendState();
+            Input.TextChanged += (s, e) =>
+            {
+                UpdateSendState();
+                _core.NotifyTyping(ChatKey, Input.Text.Length > 0);
+            };
             _files.CollectionChanged += (s, e) => UpdateSendState();
             Activated += (s, e) =>
             {
                 _core.LastChat = this;
-                foreach (var m in _core.History.Where(x => x.Chat && !x.Outgoing && !x.Read && x.PeerId == Peer.Id).ToList()) _core.MarkRead(m);
+                _core.MarkChatRead(ChatKey);
             };
             Loaded += (s, e) => { ScrollToEnd(); Input.Focus(); };
             PreviewKeyDown += (s, e) =>
             {
                 if (e.Key == Key.Escape && Input.Text.Length == 0) Close();
-                else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemPlus || e.Key == Key.Add)) { Zoom(+1); e.Handled = true; }
-                else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemMinus || e.Key == Key.Subtract)) { Zoom(-1); e.Handled = true; }
-                else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.D0 || e.Key == Key.NumPad0)) { _core.SetChatLook(size: ChatLook.DefaultSize); e.Handled = true; }
+                else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == System.Windows.Input.Key.OemPlus || e.Key == System.Windows.Input.Key.Add)) { Zoom(+1); e.Handled = true; }
+                else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == System.Windows.Input.Key.OemMinus || e.Key == System.Windows.Input.Key.Subtract)) { Zoom(-1); e.Handled = true; }
+                else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == System.Windows.Input.Key.D0 || e.Key == System.Windows.Input.Key.NumPad0)) { _core.SetChatLook(size: ChatLook.DefaultSize); e.Handled = true; }
             };
             // Ctrl + 마우스 휠로 글자 크기
             PreviewMouseWheel += (s, e) =>
@@ -100,10 +112,56 @@ namespace BluePhone
             CaptureBtn.ToolTip = core.Settings.CaptureHotkey ? "화면 캡처 (Ctrl+Alt+S)" : "화면 캡처";
         }
 
-        void Peer_PropertyChanged(object sender, PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(new Action(RefreshHeader));
+        /// <summary>머리글에 보일 동료(1:1 상대 또는 방 구성원)의 접속 상태 변화를 지켜봄</summary>
+        void WatchPeers()
+        {
+            foreach (var w in _watched) w.PropertyChanged -= Peer_PropertyChanged;
+            _watched.Clear();
+            if (Peer != null) _watched.Add(Peer);
+            else foreach (var m in Room.Others) { var p = _core.Peers.FirstOrDefault(x => x.Id == m.Id); if (p != null) _watched.Add(p); }
+            foreach (var w in _watched) w.PropertyChanged += Peer_PropertyChanged;
+        }
+
+        void Peer_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(RefreshHeader));
+        }
+
+        void Core_RoomsChanged()
+        {
+            if (Room == null) return;
+            if (Room.Left) { Close(); return; }
+            WatchPeers();
+            RefreshHeader();
+        }
+
+        void Core_TypingChanged(string key) { if (key == ChatKey) RefreshTyping(); }
+
+        void RefreshTyping()
+        {
+            var t = _core.TypingText(ChatKey);
+            TypingText.Text = t ?? "";
+            TypingBar.Visibility = t == null ? Visibility.Collapsed : Visibility.Visible;
+        }
 
         void RefreshHeader()
         {
+            if (Room != null)
+            {
+                Title = Room.Title + " — 그룹 대화";
+                HName.Text = Room.Title;
+                HInitial.Text = "\uE716";
+                HInitial.FontFamily = (FontFamily)FindResource("Glyph");
+                HInitial.FontSize = 15;
+                HAvatar.Fill = Palette.Avatar("room:" + Room.Id);
+                HPhoto.ImageSource = null;
+                HDot.Visibility = HDotRing.Visibility = Visibility.Collapsed;
+                int online = _watched.Count(p => p.IsOnline);
+                HStatus.Text = $"{Room.Count}명 · 접속 {online}명";
+                HSecure.Visibility = _watched.Count > 0 && _watched.All(p => p.Secure) ? Visibility.Visible : Visibility.Collapsed;
+                UpdateSendState();
+                return;
+            }
             Title = Peer.DisplayName + " — 대화";
             HName.Text = Peer.DisplayName;
             HInitial.Text = Peer.Initial;
@@ -112,9 +170,10 @@ namespace BluePhone
             HDot.Fill = Peer.StatusBrush;
             HStatus.Text = string.Join(" · ", new[] { Peer.StatusText, Peer.Dept }.Where(x => !string.IsNullOrWhiteSpace(x)));
             HSecure.Visibility = Peer.Secure ? Visibility.Visible : Visibility.Collapsed;
+            UpdateSendState();
         }
 
-        void RefreshEmpty() => Empty.Visibility = _view.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
+        void RefreshEmpty() => Empty.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         void ScrollToEnd()
         {
@@ -130,7 +189,7 @@ namespace BluePhone
             SendBtn.IsEnabled = has && !_sending && _zipping == 0;
             Hint.Text = _core.Settings.EnterToSend ? "Enter 보내기" : "Ctrl+Enter 보내기";
             Hint.ToolTip = _core.Settings.EnterToSend ? "Shift+Enter 줄바꿈 · 설정에서 Ctrl+Enter 로 바꿀 수 있습니다" : null;
-            if (!Peer.IsOnline) Hint.Text = "오프라인 · 접속하면 전달";
+            if (Peer != null && !Peer.IsOnline) Hint.Text = "오프라인 · 접속하면 전달";
         }
 
         // ───────────── input ─────────────
@@ -170,7 +229,12 @@ namespace BluePhone
             ClearSchedule_Click(null, null);
             bool urgent = Urgent.IsChecked == true;
             Urgent.IsChecked = false;
-            try { await _core.Send(new[] { Peer }, text, files, urgent, false, at: at, chat: true); }
+            _core.NotifyTyping(ChatKey, false);
+            try
+            {
+                if (Room != null) await _core.SendRoom(Room, text, files, urgent, at);
+                else await _core.Send(new[] { Peer }, text, files, urgent, false, at: at, chat: true);
+            }
             finally { _sending = false; UpdateSendState(); Input.Focus(); }
             ScrollToEnd();
         }
@@ -241,31 +305,143 @@ namespace BluePhone
 
         // ───────────── 최근 대화만 먼저 ─────────────
 
+        const int FirstPage = 120;
         const int PageSize = 300;
-        long _since;
-        int _shown = PageSize;
+        int _shown = FirstPage;
 
-        /// <summary>최근 n개의 대화가 들어가는 시작 시각</summary>
-        long SinceFor(int n)
+        /// <summary>이 대화의 메시지 중 최근 _shown 개를 한 번에 채움 (기록은 한 번만 훑음)</summary>
+        void Rebuild()
         {
-            var ts = _core.History.Where(m => m.Chat && m.Involves(Peer.Id)).Select(m => m.Ts).OrderByDescending(t => t).Skip(n - 1).FirstOrDefault();
-            return ts;   // 대화가 n개보다 적으면 0 → 전부
+            var all = _core.History.Where(m => Core.InChat(m, ChatKey)).OrderBy(m => m.Ts).ToList();
+            var show = all.Count > _shown ? all.GetRange(all.Count - _shown, _shown) : all;
+            foreach (var m in show)
+                foreach (var f in m.Files)
+                {
+                    if (m.Outgoing) f.State = "보낸 파일";
+                    else if (string.IsNullOrEmpty(f.State) && !string.IsNullOrEmpty(f.LocalPath) && File.Exists(f.LocalPath)) f.State = "완료";
+                }
+            _rows = new ObservableCollection<ChatMessage>(show);
+            List.ItemsSource = _rows;
+            MoreBtn.Visibility = all.Count > show.Count ? Visibility.Visible : Visibility.Collapsed;
+            RefreshEmpty();
         }
 
-        void RefreshMore()
+        void History_Changed(object sender, NotifyCollectionChangedEventArgs e)
         {
-            bool more = _since > 0 && _core.History.Any(m => m.Chat && m.Ts < _since && m.Involves(Peer.Id));
-            MoreBtn.Visibility = more ? Visibility.Visible : Visibility.Collapsed;
+            switch (e.Action)
+            {
+                case NotifyCollectionChangedAction.Add:
+                    bool added = false;
+                    foreach (ChatMessage m in e.NewItems)
+                    {
+                        if (!Core.InChat(m, ChatKey) || _rows.Contains(m)) continue;
+                        if (m.Outgoing) foreach (var f in m.Files) f.State = "보낸 파일";
+                        int i = _rows.Count;
+                        while (i > 0 && _rows[i - 1].Ts > m.Ts) i--;
+                        _rows.Insert(i, m);
+                        _shown++;
+                        added = true;
+                    }
+                    if (added) { RefreshEmpty(); ScrollToEnd(); }
+                    break;
+                case NotifyCollectionChangedAction.Remove:
+                    foreach (ChatMessage m in e.OldItems) _rows.Remove(m);
+                    RefreshEmpty();
+                    break;
+                default:
+                    Rebuild();
+                    break;
+            }
         }
 
         void More_Click(object sender, RoutedEventArgs e)
         {
-            var first = List.Items.Count > 0 ? List.Items[0] : null;
+            var first = _rows.FirstOrDefault();
             _shown += PageSize;
-            _since = SinceFor(_shown);
-            _view.Refresh();
-            RefreshMore();
+            Rebuild();
             if (first != null) Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => List.ScrollIntoView(first)));
+        }
+
+        // ───────────── 그룹 대화 ─────────────
+
+        /// <summary>동료를 여러 명 골라 체크하는 메뉴 (메뉴가 닫히지 않아 연달아 고를 수 있음) + 마지막 줄의 실행 버튼</summary>
+        MenuItem PickPeers(string header, ICollection<string> exclude, Func<int, string> actionText, Action<List<Peer>> act)
+        {
+            var root = new MenuItem { Header = header };
+            root.Items.Add(new MenuItem { Header = "(불러오는 중)" });
+            root.SubmenuOpened += (s, e) =>
+            {
+                if (e.OriginalSource != root) return;
+                root.Items.Clear();
+                var chosen = new List<Peer>();
+                var peers = _core.Peers.Where(x => !_core.IsBlocked(x.Id) && !exclude.Contains(x.Id))
+                    .OrderByDescending(x => x.IsOnline).ThenBy(x => x.DisplayName).ToList();
+                var go = new MenuItem { Header = actionText(0), IsEnabled = false, FontWeight = FontWeights.SemiBold };
+                go.Click += (o, ev) => { if (chosen.Count > 0) act(chosen.ToList()); };
+                if (peers.Count == 0) root.Items.Add(new MenuItem { Header = "더 초대할 동료가 없습니다", IsEnabled = false });
+                foreach (var p in peers)
+                {
+                    var pp = p;
+                    var mi = new MenuItem
+                    {
+                        Header = (p.IsOnline ? "" : "(오프라인) ") + (string.IsNullOrEmpty(p.Dept) ? p.DisplayName : $"{p.DisplayName}  · {p.Dept}"),
+                        IsCheckable = true, StaysOpenOnClick = true,
+                    };
+                    mi.Click += (o, ev) =>
+                    {
+                        if (mi.IsChecked) { if (!chosen.Contains(pp)) chosen.Add(pp); } else chosen.Remove(pp);
+                        go.Header = actionText(chosen.Count);
+                        go.IsEnabled = chosen.Count > 0;
+                    };
+                    root.Items.Add(mi);
+                }
+                if (peers.Count > 0) { root.Items.Add(new Separator()); root.Items.Add(go); }
+            };
+            return root;
+        }
+
+        void People_Click(object sender, RoutedEventArgs e)
+        {
+            var m = new ContextMenu { PlacementTarget = PeopleBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+            ChatLook.Attach(m, _look);
+            if (Room == null)
+            {
+                m.Items.Add(PickPeers("그룹 대화 만들기", new[] { Peer.Id }, n => n == 0 ? "함께할 동료를 고르세요" : $"{n + 1}명과 그룹 대화 시작",
+                    list => { list.Insert(0, Peer); _core.OpenRoom(_core.CreateRoom(list)); }));
+                m.Items.Add(new MenuItem { Header = $"{Peer.DisplayName}님과 1:1 대화 중", IsEnabled = false });
+                m.IsOpen = true;
+                return;
+            }
+            var members = new MenuItem { Header = $"대화 상대 {Room.Count}명" };
+            foreach (var mem in Room.Members.OrderByDescending(x => x.Id == _core.Settings.Id))
+            {
+                var p = _core.Peers.FirstOrDefault(x => x.Id == mem.Id);
+                string label = mem.Id == _core.Settings.Id ? "나 (" + _core.Settings.Name + ")" : (p?.DisplayName ?? mem.Name) + (p != null && p.IsOnline ? "" : "  · 오프라인");
+                var mi = new MenuItem { Header = label };
+                if (p != null && mem.Id != _core.Settings.Id) mi.Click += (o, ev) => _core.OpenChat(p);
+                else mi.IsEnabled = false;
+                if (p != null) mi.ToolTip = "누르면 1:1 대화";
+                members.Items.Add(mi);
+            }
+            m.Items.Add(members);
+            m.Items.Add(PickPeers("동료 초대", Room.Members.Select(x => x.Id).ToList(), n => n == 0 ? "초대할 동료를 고르세요" : $"{n}명 초대하기",
+                async list => await _core.InviteToRoom(Room, list)));
+            var ren = new MenuItem { Header = "방 이름 바꾸기…" };
+            ren.Click += async (o, ev) =>
+            {
+                var v = Dialog.Prompt(this, "방 이름", "모든 구성원에게 보이는 이름입니다. 비워 두면 구성원 이름으로 표시합니다.", Room.Name ?? "", "저장");
+                if (v != null) await _core.RenameRoom(Room, v);
+            };
+            m.Items.Add(ren);
+            m.Items.Add(new Separator());
+            var leave = new MenuItem { Header = "방 나가기" };
+            leave.Click += async (o, ev) =>
+            {
+                if (Dialog.Confirm(this, "방 나가기", "이 대화방에서 나갈까요? 다른 구성원에게 나갔다고 알리고, 내 PC의 대화 내용도 지웁니다.", "나가기", danger: true))
+                    await _core.LeaveRoom(Room);
+            };
+            m.Items.Add(leave);
+            m.IsOpen = true;
         }
 
         void Zoom(int step)

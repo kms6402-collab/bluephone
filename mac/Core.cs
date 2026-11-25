@@ -18,7 +18,7 @@ namespace BluePhone
     using Packet = Dictionary<string, object>;
 
     /// <summary>앱 전체 상태와 동작 (Windows 판 Core 와 같은 동작 · 같은 통신)</summary>
-    public sealed class Core
+    public sealed partial class Core
     {
         public AppSettings Settings { get; }
         public ObservableCollection<Peer> Peers { get; } = new ObservableCollection<Peer>();
@@ -49,6 +49,8 @@ namespace BluePhone
             Store.SaveSettings(Settings);
             _status = Settings.LastStatus == Status.Offline ? Status.Online : (Settings.LastStatus ?? Status.Online);
             ChatMessage.PeerLookup = id => Peers.FirstOrDefault(x => x.Id == id);
+            ChatRoom.Lookup = ChatMessage.PeerLookup;
+            ChatRoom.MyId = Settings.Id;
             Peers.CollectionChanged += (s, e) => { if (e.NewItems != null) foreach (Peer p in e.NewItems) Track(p); };
             foreach (var p in Store.LoadContacts())
             {
@@ -162,6 +164,7 @@ namespace BluePhone
             Net.ByeReceived += id => Post(() => OnBye(id));
             Net.MessageReceived += (p, ip) => Post(() => OnMessage(p, ip));
             Net.ReadReceived += (msg, from) => Post(() => OnRead(msg, from));
+            Net.TypingReceived += p => Post(() => OnTyping(p));
         }
 
         /// <summary>화면 캡처 전역 단축키 ⌃⌥S (설정에서 끌 수 있음)</summary>
@@ -493,23 +496,27 @@ namespace BluePhone
 
         // ───────────────────────── messaging ─────────────────────────
 
-        public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false, DateTime? at = null, bool chat = false)
+        public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false, DateTime? at = null, bool chat = false,
+                                            ChatRoom room = null, string sys = null)
         {
+            bool one = to.Count == 1 && room == null;
             var m = new ChatMessage
             {
                 Id = Guid.NewGuid().ToString("N"),
                 Outgoing = true,
-                PeerId = to.Count == 1 ? to[0].Id : null,
-                PeerName = to.Count == 1 ? to[0].DisplayName : null,
-                PeerDept = to.Count == 1 ? to[0].Dept : null,
-                PeerIp = to.Count == 1 ? to[0].Ip : null,
-                PeerPort = to.Count == 1 ? to[0].Port : 0,
+                PeerId = one ? to[0].Id : null,
+                PeerName = one ? to[0].DisplayName : null,
+                PeerDept = one ? to[0].Dept : null,
+                PeerIp = one ? to[0].Ip : null,
+                PeerPort = one ? to[0].Port : 0,
                 Text = text,
                 Ts = DateTimeOffset.Now.ToUnixTimeMilliseconds(),
                 Urgent = urgent,
                 Broadcast = broadcast,
                 Auto = auto,
-                Chat = chat,
+                Chat = chat || room != null,
+                Room = room?.Id,
+                Sys = sys,
                 To = to.Select(p => p.DisplayName).ToList(),
                 ToIds = to.Select(p => p.Id).ToList(),
             };
@@ -535,7 +542,9 @@ namespace BluePhone
             return m;
         }
 
-        Packet BuildPacket(ChatMessage m) => new Packet
+        Packet BuildPacket(ChatMessage m)
+        {
+            var packet = new Packet
         {
             ["t"] = "msg",
             ["id"] = m.Id,
@@ -552,6 +561,9 @@ namespace BluePhone
             ["to"] = m.To,
             ["files"] = m.Files.Select(f => new Packet { ["name"] = f.Name, ["size"] = f.Size, ["token"] = f.Token }).ToList(),
         };
+            AddRoomFields(packet, m);
+            return packet;
+        }
 
         async Task Deliver(ChatMessage m, IList<Peer> to)
         {
@@ -694,8 +706,13 @@ namespace BluePhone
                     Token = NetService.Str(f, "token"),
                 }).ToList(),
             };
+            if (!ApplyRoom(p, peer, ip, m)) return;
+            var key = KeyOf(m);
+            if (m.Chat) ClearTyping(key, from);
+            if (m.IsSys) m.Read = true;   // 초대 · 나감 알림 줄은 안 읽은 수에 넣지 않음
             History.Insert(0, m);
             Store.AppendHistory(m);
+            if (m.IsSys) return;
             AutoFetchImages(m);
             Telegram?.Forward(m, _status);
             peer.HasUnread = true;
@@ -703,7 +720,9 @@ namespace BluePhone
             UpdateTray();
 
             bool dnd = _status == Status.Dnd && !m.Urgent;
-            if (_chats.TryGetValue(peer.Id, out var chat) && m.Chat && chat.IsActive && chat.WindowState != WindowState.Minimized && !m.Urgent)
+            ChatWindow chat = null;
+            if (m.Chat && key != null) _chats.TryGetValue(key, out chat);
+            if (chat != null && chat.IsActive && chat.WindowState != WindowState.Minimized && !m.Urgent)
             {
                 MarkRead(m);
             }
@@ -714,7 +733,7 @@ namespace BluePhone
                 else ShowPopup(m);
             }
 
-            if (!m.Auto && !string.IsNullOrWhiteSpace(Settings.AutoReply) && _status != Status.Online)
+            if (!m.Auto && m.Room == null && !string.IsNullOrWhiteSpace(Settings.AutoReply) && _status != Status.Online)
                 _ = Send(new[] { peer }, Settings.AutoReply.Trim(), null, false, false, auto: true);
         }
 
@@ -804,21 +823,33 @@ namespace BluePhone
         readonly Dictionary<string, ChatWindow> _chats = new Dictionary<string, ChatWindow>();
         public ChatWindow LastChat { get; set; }
 
-        public ChatWindow OpenChat(Peer p, string attach = null)
+        public ChatWindow OpenChat(Peer p, string attach = null) =>
+            p == null ? null : OpenChatWindow(p.Id, () => new ChatWindow(this, p), attach);
+
+        /// <summary>그룹 대화방 창</summary>
+        public ChatWindow OpenRoom(ChatRoom r, string attach = null) =>
+            r == null ? null : OpenChatWindow(Typists.RoomKey(r.Id), () => new ChatWindow(this, r), attach);
+
+        /// <summary>대화 창은 바로 띄우고, 읽음 처리 · 이미지 받기 같은 일은 창이 그려진 뒤에</summary>
+        ChatWindow OpenChatWindow(string key, Func<ChatWindow> make, string attach)
         {
-            if (p == null) return null;
-            if (!_chats.TryGetValue(p.Id, out var w))
+            if (!_chats.TryGetValue(key, out var w))
             {
-                w = new ChatWindow(this, p);
-                _chats[p.Id] = w;
-                w.Closed += (s, e) => { _chats.Remove(p.Id); if (LastChat == w) LastChat = null; };
+                w = make();
+                _chats[key] = w;
+                var ww = w;
+                w.Closed += (s, e) => { if (_chats.TryGetValue(key, out var cur) && cur == ww) _chats.Remove(key); if (LastChat == ww) LastChat = null; NotifyTyping(key, false); };
                 w.Show();
             }
             BringToFront(w);
             if (attach != null) w.Attach(attach);
-            foreach (var m in History.Where(x => x.Chat && !x.Outgoing && !x.Read && x.PeerId == p.Id).ToList()) MarkRead(m);
-            foreach (var m in History.Where(x => !x.Outgoing && x.PeerId == p.Id && x.Files.Count > 0).Take(30).ToList()) AutoFetchImages(m);
+            Dispatcher.UIThread.Post(() => AfterChatOpened(key), DispatcherPriority.Background);
             return w;
+        }
+
+        void CloseChatWindow(string key)
+        {
+            if (_chats.TryGetValue(key, out var w)) w.Close();
         }
 
         public void SetChatLook(string theme = null, string font = null, double? size = null)
@@ -905,9 +936,9 @@ namespace BluePhone
             var existing = _popups.FirstOrDefault(p => p.Message == m);
             if (existing != null) { BringToFront(existing); return; }
 
-            if (m.Chat && activate && PeerOf(m) is Peer cp) { OpenChat(cp); return; }
+            if (m.Chat && activate && OpenChatFor(m) != null) return;
             if (m.Chat && !m.Outgoing)
-                foreach (var old in _popups.Where(x => x.Message.Chat && !x.Message.Outgoing && x.Message.PeerId == m.PeerId).ToList()) old.CloseIfIdle();
+                foreach (var old in _popups.Where(x => x.Message.Chat && !x.Message.Outgoing && KeyOf(x.Message) == KeyOf(m)).ToList()) old.CloseIfIdle();
 
             var w = new MessageWindow(this, m) { IsReminder = reminder, IsChatAlert = m.Chat && !m.Outgoing };
             if (!activate && !m.Outgoing) w.Privacy = Settings.AlertPrivacy;

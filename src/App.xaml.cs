@@ -87,7 +87,7 @@ namespace BluePhone
     }
 
     /// <summary>앱 전체 상태와 동작을 담당</summary>
-    public sealed class Core
+    public sealed partial class Core
     {
         public AppSettings Settings { get; }
         public ObservableCollection<Peer> Peers { get; } = new ObservableCollection<Peer>();
@@ -120,6 +120,8 @@ namespace BluePhone
             Store.SaveSettings(Settings); // 고유 ID 고정
             _status = Settings.LastStatus == Status.Offline ? Status.Online : (Settings.LastStatus ?? Status.Online);
             ChatMessage.PeerLookup = id => Peers.FirstOrDefault(x => x.Id == id);
+            ChatRoom.Lookup = ChatMessage.PeerLookup;
+            ChatRoom.MyId = Settings.Id;
             Peers.CollectionChanged += (s, e) => { if (e.NewItems != null) foreach (Peer p in e.NewItems) Track(p); };
             foreach (var p in Store.LoadContacts())
             {
@@ -218,6 +220,7 @@ namespace BluePhone
             }
             Settings.LastRunVersion = cur;
             Store.SaveSettings(Settings);
+            UiTest.Run(this);
 
             // 자동 업데이트: 시작 20초 뒤, 이후 6시간마다
             _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
@@ -246,6 +249,7 @@ namespace BluePhone
             Net.ByeReceived += id => UI.BeginInvoke(new Action(() => OnBye(id)));
             Net.MessageReceived += (p, ip) => UI.BeginInvoke(new Action(() => OnMessage(p, ip)));
             Net.ReadReceived += (msg, from) => UI.BeginInvoke(new Action(() => OnRead(msg, from)));
+            Net.TypingReceived += p => UI.BeginInvoke(new Action(() => OnTyping(p)));
         }
 
         HotKey _hotkey;
@@ -583,23 +587,27 @@ namespace BluePhone
         // ───────────────────────── messaging ─────────────────────────
 
         /// <summary>쪽지 보내기. at 을 주면 예약, 받지 못한 동료에게는 접속할 때 다시 보냄</summary>
-        public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false, DateTime? at = null, bool chat = false)
+        public async Task<ChatMessage> Send(IList<Peer> to, string text, IList<string> files, bool urgent, bool broadcast, bool auto = false, DateTime? at = null, bool chat = false,
+                                            ChatRoom room = null, string sys = null)
         {
+            bool one = to.Count == 1 && room == null;
             var m = new ChatMessage
             {
                 Id = Guid.NewGuid().ToString("N"),
                 Outgoing = true,
-                PeerId = to.Count == 1 ? to[0].Id : null,
-                PeerName = to.Count == 1 ? to[0].DisplayName : null,
-                PeerDept = to.Count == 1 ? to[0].Dept : null,
-                PeerIp = to.Count == 1 ? to[0].Ip : null,
-                PeerPort = to.Count == 1 ? to[0].Port : 0,
+                PeerId = one ? to[0].Id : null,
+                PeerName = one ? to[0].DisplayName : null,
+                PeerDept = one ? to[0].Dept : null,
+                PeerIp = one ? to[0].Ip : null,
+                PeerPort = one ? to[0].Port : 0,
                 Text = text,
                 Ts = DateTimeOffset.Now.ToUnixTimeMilliseconds(),
                 Urgent = urgent,
                 Broadcast = broadcast,
                 Auto = auto,
-                Chat = chat,
+                Chat = chat || room != null,
+                Room = room?.Id,
+                Sys = sys,
                 To = to.Select(p => p.DisplayName).ToList(),
                 ToIds = to.Select(p => p.Id).ToList(),
             };
@@ -625,7 +633,9 @@ namespace BluePhone
             return m;
         }
 
-        Packet BuildPacket(ChatMessage m) => new Packet
+        Packet BuildPacket(ChatMessage m)
+        {
+            var packet = new Packet
         {
             ["t"] = "msg",
             ["id"] = m.Id,
@@ -642,6 +652,9 @@ namespace BluePhone
             ["to"] = m.To,
             ["files"] = m.Files.Select(f => new Packet { ["name"] = f.Name, ["size"] = f.Size, ["token"] = f.Token }).ToList(),
         };
+            AddRoomFields(packet, m);
+            return packet;
+        }
 
         /// <summary>실제 전송. 실패한 동료는 대기열(PendingTo)에 넣어 접속 시 재전송 (자동응답·전체 공지는 제외)</summary>
         async Task Deliver(ChatMessage m, IList<Peer> to)
@@ -788,8 +801,13 @@ namespace BluePhone
                     Token = NetService.Str(f, "token"),
                 }).ToList(),
             };
+            if (!ApplyRoom(p, peer, ip, m)) return;
+            var key = KeyOf(m);
+            if (m.Chat) ClearTyping(key, from);
+            if (m.IsSys) m.Read = true;   // 초대 · 나감 알림 줄은 안 읽은 수에 넣지 않음
             History.Insert(0, m);
             Store.AppendHistory(m);
+            if (m.IsSys) return;
             AutoFetchImages(m);
             Telegram?.Forward(m, _status);
             peer.HasUnread = true;
@@ -798,7 +816,9 @@ namespace BluePhone
 
             bool dnd = _status == Status.Dnd && !m.Urgent;
             // 그 동료와의 대화 창을 보고 있으면 팝업 없이 바로 읽음 처리
-            if (_chats.TryGetValue(peer.Id, out var chat) && m.Chat && chat.IsActive && chat.WindowState != WindowState.Minimized && !m.Urgent)
+            ChatWindow chat = null;
+            if (m.Chat && key != null) _chats.TryGetValue(key, out chat);
+            if (chat != null && chat.IsActive && chat.WindowState != WindowState.Minimized && !m.Urgent)
             {
                 MarkRead(m);
             }
@@ -811,7 +831,7 @@ namespace BluePhone
             }
 
             // 부재 시 자동응답
-            if (!m.Auto && !string.IsNullOrWhiteSpace(Settings.AutoReply) && _status != Status.Online)
+            if (!m.Auto && m.Room == null && !string.IsNullOrWhiteSpace(Settings.AutoReply) && _status != Status.Online)
                 _ = Send(new[] { peer }, Settings.AutoReply.Trim(), null, false, false, auto: true);
         }
 
@@ -919,22 +939,33 @@ namespace BluePhone
             }));
         }
 
-        public ChatWindow OpenChat(Peer p, string attach = null)
+        public ChatWindow OpenChat(Peer p, string attach = null) =>
+            p == null ? null : OpenChatWindow(p.Id, () => new ChatWindow(this, p), attach);
+
+        /// <summary>그룹 대화방 창</summary>
+        public ChatWindow OpenRoom(ChatRoom r, string attach = null) =>
+            r == null ? null : OpenChatWindow(Typists.RoomKey(r.Id), () => new ChatWindow(this, r), attach);
+
+        /// <summary>대화 창은 바로 띄우고, 읽음 처리 · 이미지 받기 같은 일은 창이 그려진 뒤에</summary>
+        ChatWindow OpenChatWindow(string key, Func<ChatWindow> make, string attach)
         {
-            if (p == null) return null;
-            if (!_chats.TryGetValue(p.Id, out var w))
+            if (!_chats.TryGetValue(key, out var w))
             {
-                w = new ChatWindow(this, p);
-                _chats[p.Id] = w;
-                w.Closed += (s, e) => { _chats.Remove(p.Id); if (LastChat == w) LastChat = null; };
+                w = make();
+                _chats[key] = w;
+                var ww = w;
+                w.Closed += (s, e) => { if (_chats.TryGetValue(key, out var cur) && cur == ww) _chats.Remove(key); if (LastChat == ww) LastChat = null; NotifyTyping(key, false); };
                 w.Show();
             }
             Native.BringToFront(w);
             if (attach != null) w.Attach(attach);
-            foreach (var m in History.Where(x => x.Chat && !x.Outgoing && !x.Read && x.PeerId == p.Id).ToList()) MarkRead(m);
-            // 예전에 받은 이미지 중 아직 안 받은 것도 바로 보이도록 (최근 것부터)
-            foreach (var m in History.Where(x => !x.Outgoing && x.PeerId == p.Id && x.Files.Count > 0).Take(30).ToList()) AutoFetchImages(m);
+            UI.BeginInvoke(DispatcherPriority.Background, new Action(() => AfterChatOpened(key)));
             return w;
+        }
+
+        void CloseChatWindow(string key)
+        {
+            if (_chats.TryGetValue(key, out var w)) w.Close();
         }
 
         /// <summary>대화 창 꾸미기 변경 — 열려 있는 모든 대화 창에 바로 적용하고 저장</summary>
@@ -1026,10 +1057,10 @@ namespace BluePhone
             if (existing != null) { Native.BringToFront(existing); return; }
 
             // 대화 메시지를 직접 열면 대화 창으로
-            if (m.Chat && activate && PeerOf(m) is Peer cp) { OpenChat(cp); return; }
+            if (m.Chat && activate && OpenChatFor(m) != null) return;
             // 같은 동료의 대화 알림은 하나만 (가장 최근 것으로 교체)
             if (m.Chat && !m.Outgoing)
-                foreach (var old in _popups.Where(x => x.Message.Chat && !x.Message.Outgoing && x.Message.PeerId == m.PeerId).ToList()) old.CloseIfIdle();
+                foreach (var old in _popups.Where(x => x.Message.Chat && !x.Message.Outgoing && KeyOf(x.Message) == KeyOf(m)).ToList()) old.CloseIfIdle();
 
             var w = new MessageWindow(this, m) { IsReminder = reminder, IsChatAlert = m.Chat && !m.Outgoing };
             // 개인정보 보호: 저절로 뜨는 알림만 가림 (쪽지함에서 직접 연 창은 그대로 표시)
